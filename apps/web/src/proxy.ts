@@ -149,6 +149,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // The checksum route handles staff sign-in itself so the link survives login.
+  if (pathname === "/api/storage/file" && request.nextUrl.searchParams.has("sha256")) {
+    return NextResponse.next();
+  }
+
   const sessionCookie = getSessionCookie(request);
 
   if (!sessionCookie) {
