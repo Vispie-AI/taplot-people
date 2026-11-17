@@ -1,13 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 
-import { candidateFiles, db } from "@harly/db";
+import { candidateFiles, candidates, db } from "@harly/db";
 import { getWorkspaceContextOrNull } from "@/features/workspaces/context";
 import {
   PORTAL_SESSION_COOKIE,
   resolvePortalSession,
 } from "@/lib/portal-auth";
 import { requireCandidatePermission } from "@/features/workspaces/permissions-server";
+import { auth } from "@/lib/auth";
 import { storage } from "@/lib/storage";
 import { privateResumeFileUrl, resumeKeyFromUrl } from "@/lib/resume/storage-key";
 import { cookies } from "next/headers";
@@ -19,6 +20,9 @@ const CONTENT_TYPES: Record<string, string> = {
   pdf: "application/pdf",
   doc: "application/msword",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
 };
 
 function contentTypeFor(key: string) {
@@ -49,7 +53,64 @@ async function findCandidateFileForKey(workspaceId: string, key: string) {
   );
 }
 
+function privateRedirect(location: string) {
+  return new NextResponse(null, {
+    status: 303,
+    headers: { Location: location, "Cache-Control": "private, no-store" },
+  });
+}
+
+async function redirectToResumeByHash(request: NextRequest, hash: string) {
+  const notFound = () => new NextResponse("Not found", {
+    status: 404,
+    headers: { "Cache-Control": "private, no-store" },
+  });
+  if (!/^[a-f0-9]{64}$/i.test(hash) || request.nextUrl.searchParams.size !== 1) {
+    return notFound();
+  }
+
+  const context = await getWorkspaceContextOrNull();
+  if (!context) {
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (session) return notFound();
+    const target = `/api/storage/file?sha256=${hash.toLowerCase()}`;
+    return privateRedirect(`/login?redirect=${encodeURIComponent(target)}`);
+  }
+
+  const workspaceId = context.organization.id;
+  const rows = await db
+    .select({ candidateId: candidateFiles.candidateId, fileUrl: candidateFiles.fileUrl })
+    .from(candidateFiles)
+    .innerJoin(candidates, and(
+      eq(candidates.id, candidateFiles.candidateId),
+      eq(candidates.workspaceId, candidateFiles.workspaceId),
+      isNull(candidates.deletedAt),
+      isNull(candidates.anonymizedAt),
+    ))
+    .where(and(
+      eq(candidateFiles.workspaceId, workspaceId),
+      eq(candidateFiles.contentHash, hash.toLowerCase()),
+    ));
+  for (const row of rows) {
+    const key = resumeKeyFromUrl(row.fileUrl);
+    if (!key || (key.startsWith("workspaces/") &&
+        !key.startsWith(`workspaces/${workspaceId}/resumes/`))) {
+      continue;
+    }
+    try {
+      await requireCandidatePermission("candidates:view", row.candidateId);
+    } catch {
+      continue;
+    }
+    return privateRedirect(privateResumeFileUrl(key));
+  }
+  return notFound();
+}
+
 export async function GET(request: NextRequest) {
+  const hash = request.nextUrl.searchParams.get("sha256");
+  if (hash !== null) return redirectToResumeByHash(request, hash);
+
   const requested = request.nextUrl.searchParams.get("key");
   const key = requested ? resumeKeyFromUrl(requested) : null;
   if (!key) return new NextResponse("Not found", { status: 404 });

@@ -13,6 +13,11 @@ operators. How to cut a release is in [RELEASING.md](RELEASING.md). The
 
 ## [Unreleased]
 
+### Added
+
+- Staff can open a stored resume by its SHA-256 checksum from a recruiting
+  integration. The link checks the signed-in user's candidate permissions.
+
 ## [0.5.0] - 2026-11-10
 
 Harly now speaks six languages. The web app and the interview emails are

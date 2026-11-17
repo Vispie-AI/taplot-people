@@ -7,11 +7,13 @@ const mocks = vi.hoisted(() => ({
   requireCandidatePermission: vi.fn(),
   read: vi.fn(),
   cookies: vi.fn(),
+  getSession: vi.fn(),
 }));
 
 vi.mock("drizzle-orm", () => ({
   and: vi.fn(),
   eq: vi.fn(),
+  isNull: vi.fn(),
   or: vi.fn(),
   sql: vi.fn(),
 }));
@@ -19,7 +21,10 @@ vi.mock("drizzle-orm", () => ({
 vi.mock("@harly/db", () => ({
   db: { select: mocks.select },
   candidateFiles: {},
+  candidates: {},
 }));
+
+vi.mock("@/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 
 vi.mock("@/features/workspaces/context", () => ({
   getWorkspaceContextOrNull: mocks.getWorkspaceContextOrNull,
@@ -51,8 +56,8 @@ const LEGACY_RESUME_KEY = "resumes/legacy/candidate-1/resume.pdf";
 function makeSelectReturning(rows: unknown[]) {
   const builder: Record<string, unknown> = {
     from: () => builder,
-    where: () => builder,
-    limit: async () => rows,
+    innerJoin: () => builder,
+    where: () => Object.assign(Promise.resolve(rows), { limit: async () => rows }),
   };
   return builder;
 }
@@ -71,6 +76,7 @@ describe("private resume route authorization", () => {
       user: { id: "recruiter-1" },
     });
     mocks.cookies.mockResolvedValue({ get: () => undefined });
+    mocks.getSession.mockResolvedValue(null);
     mocks.select.mockReturnValue(
       makeSelectReturning([
         {
@@ -81,6 +87,50 @@ describe("private resume route authorization", () => {
     );
     mocks.requireCandidatePermission.mockResolvedValue(undefined);
     mocks.read.mockResolvedValue(new Uint8Array([37, 80, 68, 70]));
+  });
+
+  const byHash = (hash = "a".repeat(64)) =>
+    new NextRequest(`http://harly.test/api/storage/file?sha256=${hash}`);
+
+  it("redirects for an authorized document hash to the checked storage route", async () => {
+    const response = await GET(byHash());
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(
+      `/api/storage/file?key=${encodeURIComponent(RESUME_KEY)}`,
+    );
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(mocks.requireCandidatePermission).toHaveBeenCalledWith(
+      "candidates:view", "candidate-1",
+    );
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
+
+  it("returns the same answer for an unknown hash and a forbidden candidate", async () => {
+    mocks.requireCandidatePermission.mockRejectedValue(new Error("out of scope"));
+    const forbidden = await GET(byHash());
+    mocks.select.mockReturnValue(makeSelectReturning([]));
+    const missing = await GET(byHash("b".repeat(64)));
+    expect(forbidden.status).toBe(404);
+    expect(missing.status).toBe(404);
+    expect(await forbidden.text()).toBe(await missing.text());
+    expect(forbidden.headers.get("location")).toBeNull();
+  });
+
+  it("asks an anonymous viewer to log in without looking up the document", async () => {
+    mocks.getWorkspaceContextOrNull.mockResolvedValue(null);
+    const response = await GET(byHash());
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(
+      "/login?redirect=" + encodeURIComponent(`/api/storage/file?sha256=${"a".repeat(64)}`),
+    );
+    expect(mocks.select).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed or ambiguous hash lookups", async () => {
+    expect((await GET(byHash("invalid"))).status).toBe(404);
+    const both = new NextRequest(`${byHash().url}&key=${encodeURIComponent(RESUME_KEY)}`);
+    expect((await GET(both)).status).toBe(404);
+    expect(mocks.select).not.toHaveBeenCalled();
   });
 
   it("denies a same-workspace CV when the recruiter lacks candidate/job scope", async () => {
