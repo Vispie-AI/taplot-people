@@ -1,0 +1,13 @@
+{
+  "api_base_url": "https://harly.example.test",
+  "gcp_project": "example-project",
+  "gcs_bucket": "example-private-resumes",
+  "api_key_secret": "harly-boss-resume-import-key",
+  "base_token": "YOUR_RECRUITING_BASE",
+  "table_id": "YOUR_CANDIDATE_MANAGEMENT_TABLE",
+  "lark_cli": "lark-cli",
+  "lark_identity": "user",
+  "gcloud": "gcloud",
+  "gcloud_python": "",
+  "state_path": "~/.local/state/harly/boss-resume-sync.sqlite3"
+}

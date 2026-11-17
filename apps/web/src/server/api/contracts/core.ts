@@ -43,6 +43,8 @@ export type ContractDefinition = {
     headers?: z.ZodObject<z.ZodRawShape>;
   };
   requestBody?: ContractRequestBody | z.ZodTypeAny;
+  /** OpenAPI multipart schema; the handler validates its bounded body stream. */
+  multipartBody?: z.ZodTypeAny;
   responses: Record<number, ContractResponse | z.ZodTypeAny>;
 };
 
@@ -146,6 +148,7 @@ export function buildRouteHandler<
       if (idempotency?.kind === "replay") {
         return NextResponse.json(idempotency.response.body, {
           status: idempotency.response.status,
+          headers: { "Idempotent-Replayed": "true" },
         });
       }
 

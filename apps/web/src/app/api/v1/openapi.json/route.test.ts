@@ -7,6 +7,17 @@ import { GET } from "./route";
 import { apiContracts } from "@/server/api/contracts/registry";
 
 describe("GET /api/v1/openapi.json", () => {
+  it("documents the BOSS original as multipart with a secret machine key", async () => {
+    const spec = await (
+      await GET(new Request("https://harly.example/api/v1/openapi.json"))
+    ).json();
+    const operation = spec.paths["/api/v1/integrations/boss/resumes"].post;
+    expect(operation["x-harly-key-types"]).toEqual(["secret"]);
+    expect(operation["x-harly-required-scopes"]).toEqual(["candidates:write"]);
+    const body = operation.requestBody.content["multipart/form-data"].schema;
+    expect(body.required).toEqual(["metadata", "file"]);
+    expect(body.properties.file.format).toBe("binary");
+  });
   it("generates a valid OpenAPI 3.1 specification with unique operationIds and resolvable refs", async () => {
     const response = await GET(
       new Request("https://harly.example/api/v1/openapi.json"),
@@ -85,7 +96,9 @@ describe("GET /api/v1/openapi.json", () => {
     const spec = await (
       await GET(new Request("https://harly.example/api/v1/openapi.json"))
     ).json();
-    expect(Object.keys(spec.paths).filter((p) => p.includes("/automations"))).toEqual([]);
+    expect(
+      Object.keys(spec.paths).filter((p) => p.includes("/automations")),
+    ).toEqual([]);
   });
 
   it("keeps both shipped API snapshots aligned with the live contracts", async () => {
@@ -93,7 +106,9 @@ describe("GET /api/v1/openapi.json", () => {
       await GET(new Request("https://harly.example/api/v1/openapi.json"))
     ).json();
     for (const filename of ["public/openapi.json", "../docs/openapi.json"]) {
-      const snapshot = JSON.parse(fs.readFileSync(path.resolve(filename), "utf8"));
+      const snapshot = JSON.parse(
+        fs.readFileSync(path.resolve(filename), "utf8"),
+      );
       expect(snapshot.paths, filename).toEqual(spec.paths);
       expect(snapshot.components, filename).toEqual(spec.components);
     }
@@ -114,7 +129,8 @@ describe("GET /api/v1/openapi.json", () => {
         }
         if (entry.isFile() && entry.name === "route.ts") {
           const route = normalizeRoute(`/${segments.join("/")}`);
-          if (route !== "/openapi.json") {
+          // The Automations HTTP API is withdrawn (410) and deliberately not in the spec.
+          if (route !== "/openapi.json" && !route.startsWith("/automations")) {
             implementedRoutes.push(route);
           }
         }

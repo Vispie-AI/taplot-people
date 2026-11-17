@@ -60,79 +60,90 @@ function responseEntry(
   };
 }
 
-export const GET = withApi(async (request) => {
-  await enforceRateLimit(`public:openapi:${clientIp(request)}`, {
-    limit: 60,
-    windowMs: 60_000,
-  });
+export const GET = withApi(
+  async (request) => {
+    await enforceRateLimit(`public:openapi:${clientIp(request)}`, {
+      limit: 60,
+      windowMs: 60_000,
+    });
 
-  const paths: Record<string, Record<string, unknown>> = {};
-  for (const contract of apiContracts) {
-    // The Automations HTTP API is withdrawn (its routes answer 410 Gone), so it
-    // must not be advertised as callable in the public spec.
-    if (contract.tags?.includes("Automations")) continue;
-    const method = contract.method.toLowerCase();
-    paths[contract.path] ??= {};
-    paths[contract.path][method] = {
-      summary: contract.summary,
-      description: contract.description,
-      operationId: contract.operationId,
-      tags: contract.tags ?? [],
-      parameters: parameterList(contract),
-      responses: Object.fromEntries(
-        Object.entries(contract.responses).map(([status, def]) => [
-          status,
-          responseEntry(def),
-        ]),
-      ),
-      ...(contract.requestBody
-        ? {
-            requestBody: {
-              required: true,
-              content: {
-                "application/json": {
-                  schema: jsonSchema(
-                    "schema" in contract.requestBody
-                      ? contract.requestBody.schema
-                      : contract.requestBody,
-                  ),
+    const paths: Record<string, Record<string, unknown>> = {};
+    for (const contract of apiContracts) {
+      const method = contract.method.toLowerCase();
+      paths[contract.path] ??= {};
+      paths[contract.path][method] = {
+        summary: contract.summary,
+        description: contract.description,
+        operationId: contract.operationId,
+        tags: contract.tags ?? [],
+        parameters: parameterList(contract),
+        responses: Object.fromEntries(
+          Object.entries(contract.responses).map(([status, def]) => [
+            status,
+            responseEntry(def),
+          ]),
+        ),
+        ...(contract.multipartBody
+          ? {
+              requestBody: {
+                required: true,
+                content: {
+                  "multipart/form-data": {
+                    schema: jsonSchema(contract.multipartBody),
+                  },
                 },
               },
-            },
-          }
-        : {}),
-      ...(contract.auth?.scopes?.length
-        ? {
-            security: [{ bearerAuth: [] }],
-            "x-harly-required-scopes": contract.auth.scopes,
-            ...(contract.auth.keyTypes
-              ? { "x-harly-key-types": contract.auth.keyTypes }
-              : {}),
-          }
-        : {}),
-    };
-  }
+            }
+          : contract.requestBody
+            ? {
+                requestBody: {
+                  required: true,
+                  content: {
+                    "application/json": {
+                      schema: jsonSchema(
+                        "schema" in contract.requestBody
+                          ? contract.requestBody.schema
+                          : contract.requestBody,
+                      ),
+                    },
+                  },
+                },
+              }
+            : {}),
+        ...(contract.auth?.scopes?.length
+          ? {
+              security: [{ bearerAuth: [] }],
+              "x-harly-required-scopes": contract.auth.scopes,
+              ...(contract.auth.keyTypes
+                ? { "x-harly-key-types": contract.auth.keyTypes }
+                : {}),
+            }
+          : {}),
+      };
+    }
 
-  const document = {
-    openapi: "3.1.0",
-    info: {
-      title: "Harly API",
-      version: process.env.HARLY_VERSION ?? "0.1.0-dev",
-    },
-    servers: [{ url: baseUrl() }],
-    paths,
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: "http",
-          scheme: "bearer",
-          bearerFormat: "Harly API key",
-        },
+    const document = {
+      openapi: "3.1.0",
+      info: {
+        title: "Harly API",
+        version: process.env.HARLY_VERSION ?? "0.1.0-dev",
       },
-      schemas: {},
-      "x-harly-api-scopes": API_SCOPES,
-    },
-  };
+      servers: [{ url: baseUrl() }],
+      paths,
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "Harly API key",
+          },
+        },
+        schemas: {},
+        "x-harly-api-scopes": API_SCOPES,
+      },
+    };
 
-  return NextResponse.json(document);
-}, { cors: true });
+    return NextResponse.json(document);
+  },
+  { cors: true },
+);
