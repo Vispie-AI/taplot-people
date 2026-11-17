@@ -13,6 +13,10 @@ operators. How to cut a release is in [RELEASING.md](RELEASING.md). The
 
 ## [Unreleased]
 
+### Changed
+
+- Upgrade the Taplot People deployment to upstream Harly 0.5.1 while retaining its existing checksum-verified BOSS resume import endpoint. Append the upstream audit migration after the already-applied integration migration.
+
 ## [0.5.1] - 2026-11-16
 
 This release fixes the findings of a security and correctness audit. It adds

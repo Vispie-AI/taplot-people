@@ -1975,6 +1975,33 @@ export const candidateFiles = pgTable(
   ],
 );
 
+// Successful BOSS imports only. Failed storage writes never advance this cursor.
+export const bossResumeImports = pgTable(
+  "boss_resume_imports",
+  {
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    sourceRecordId: text("source_record_id").notNull(),
+    contentHash: text("content_hash").notNull(),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => candidates.id, { onDelete: "cascade" }),
+    fileId: uuid("file_id")
+      .notNull()
+      .references(() => candidateFiles.id, { onDelete: "cascade" }),
+    ...timestamps(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.sourceRecordId] }),
+    index("boss_resume_imports_candidate_idx").on(
+      table.workspaceId,
+      table.candidateId,
+    ),
+    index("boss_resume_imports_file_idx").on(table.fileId),
+  ],
+);
+
 // ATS documents. These tables deliberately keep storage keys private: every
 // read goes through the authenticated document download route.
 export const documents = pgTable(

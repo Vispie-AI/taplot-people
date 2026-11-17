@@ -371,3 +371,98 @@ Public routes use the same error envelope as the authenticated API:
 Common statuses are `400` for a missing or malformed workspace selector, `403`
 for a failed CAPTCHA or missing publishable-key scope, `404` for a job that is
 not public, `422` for invalid application fields, and `429` for rate limiting.
+
+## Incremental BOSS resume import
+
+`POST /api/v1/integrations/boss/resumes` accepts a secret API key with
+`candidates:write`. Send `multipart/form-data` containing a `metadata` JSON
+string and a `file` part. Originals may be PDF, DOC, or DOCX, up to 10 MiB.
+
+```json
+{
+  "sourceRecordId": "rec-example",
+  "sha256": "FULL_64_CHARACTER_SHA256",
+  "candidate": {
+    "name": "Example Candidate",
+    "email": "candidate@example.test",
+    "position": "Example role"
+  }
+}
+```
+
+`email`, `phone`, and `position` are optional. Harly resolves a candidate by
+the existing source association, identical attachment, or unambiguous email
+or phone match. A new profile without email receives a deterministic address
+under the reserved `.invalid` domain. Display names alone never merge profiles.
+Existing profile and pipeline fields are preserved.
+
+The server verifies the original bytes against `sha256`, checks existing
+workspace attachments, and computes missing legacy attachment hashes through
+private storage. An unreadable legacy attachment requires storage reconciliation
+before the import can safely establish deduplication. New originals use the
+configured private storage adapter and the authenticated Candidates file viewer.
+The response contains `candidateId`, `fileId`, `sourceRecordId`, `sha256`, and
+`deduplicated`. The source checkpoint commits in the same database transaction
+as the attachment association. Concurrent integration requests serialize per
+workspace. Interrupted storage writes reuse a deterministic object key on retry.
+
+### Machine credential and acceptance run
+
+Use a dedicated secret key for this task. With an existing administrator API
+key already held in Secret Manager and a Google Cloud identity authorized to
+access it, provision the machine credential from the repository root:
+
+```bash
+python3 tooling/scripts/provision-boss-resume-key.py \
+  --api-base-url https://harly.example.test \
+  --project example-project \
+  --admin-key-secret existing-harly-admin-key
+```
+
+The script stores the new key in `harly-boss-resume-import-key` through stdin
+and prints only its ID and secret name. The administrator key must hold
+`api_keys:write` and `candidates:write`. Grant the scheduled task's Google Cloud
+identity `roles/secretmanager.secretAccessor` on the dedicated secret and
+`roles/storage.objectViewer` on the private source bucket. Grant provisioning
+permissions to the provisioning identity separately.
+
+On a deployment without an administrator API key, the owner can create the
+dedicated key in Settings → Developers with `candidates:write` and store it in
+Secret Manager through the operator's authenticated provisioning workflow.
+
+Copy `tooling/scripts/boss-resume-sync.example.json` to a private runtime
+location and fill in the source Base, Candidate Management table, bucket,
+Cloud project, and Harly origin. The runtime needs Python 3.10+, `lark-cli`
+with existing table-read authorization, and `gcloud` with its authorized
+Google Cloud identity. The JSON configuration holds secret resource names.
+The key is fetched into memory at run time.
+Set the optional `gcloud_python` configuration field when the Cloud CLI needs
+a Python interpreter other than the host default.
+
+Before enabling the incremental step in the existing resume task, run one
+known source original twice:
+
+```bash
+python3 tooling/scripts/sync-boss-resumes.py \
+  --config /path/to/private/boss-sync.json \
+  --record-id rec-example --verify-repeat
+```
+
+Verify the returned `candidateId` and `fileId` are identical on both imports
+and that Candidates lists one attachment. Open that original from the
+candidate's profile and verify its contents before enabling the schedule.
+Apply the generated database migration before deploying the endpoint.
+
+After acceptance, add this command to the existing task's resume-sync step:
+
+```bash
+python3 tooling/scripts/sync-boss-resumes.py --config /path/to/private/boss-sync.json
+```
+
+The worker filters the Base to `Source = BOSS`, paginates all matching records,
+reads each original from its `Canonical Object Key` in the configured private
+GCS bucket, and checks `Document SHA256`. A private SQLite ledger tracks source
+record IDs and checksums. Missing originals and failed uploads remain in
+`retry`; only a confirmed Harly attachment becomes `synced`. A changed checksum
+is imported again. The worker never edits recruiting statuses or sends BOSS
+messages. Keep one ledger per source/destination pair and retain it between runs.

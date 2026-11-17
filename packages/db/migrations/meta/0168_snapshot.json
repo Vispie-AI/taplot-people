@@ -1,5 +1,5 @@
 {
-  "id": "7d78f57f-062d-4cb9-9e51-aec73634355d",
+  "id": "8b7cd61c-741e-4639-bc60-09f529e1ff65",
   "prevId": "85a75ff7-6219-47f6-9bde-ed57a0c74bf3",
   "version": "7",
   "dialect": "postgresql",
@@ -3482,6 +3482,148 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.boss_resume_imports": {
+      "name": "boss_resume_imports",
+      "schema": "",
+      "columns": {
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_record_id": {
+          "name": "source_record_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "candidate_id": {
+          "name": "candidate_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "file_id": {
+          "name": "file_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "boss_resume_imports_candidate_idx": {
+          "name": "boss_resume_imports_candidate_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "candidate_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "boss_resume_imports_file_idx": {
+          "name": "boss_resume_imports_file_idx",
+          "columns": [
+            {
+              "expression": "file_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "boss_resume_imports_workspace_id_organization_id_fk": {
+          "name": "boss_resume_imports_workspace_id_organization_id_fk",
+          "tableFrom": "boss_resume_imports",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "boss_resume_imports_candidate_id_candidates_id_fk": {
+          "name": "boss_resume_imports_candidate_id_candidates_id_fk",
+          "tableFrom": "boss_resume_imports",
+          "tableTo": "candidates",
+          "columnsFrom": [
+            "candidate_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "boss_resume_imports_file_id_candidate_files_id_fk": {
+          "name": "boss_resume_imports_file_id_candidate_files_id_fk",
+          "tableFrom": "boss_resume_imports",
+          "tableTo": "candidate_files",
+          "columnsFrom": [
+            "file_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "boss_resume_imports_workspace_id_source_record_id_pk": {
+          "name": "boss_resume_imports_workspace_id_source_record_id_pk",
+          "columns": [
+            "workspace_id",
+            "source_record_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.candidate_deletion_jobs": {
       "name": "candidate_deletion_jobs",
       "schema": "",
@@ -4418,21 +4560,6 @@
           "columns": [
             {
               "expression": "author_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "candidate_messages_application_idx": {
-          "name": "candidate_messages_application_idx",
-          "columns": [
-            {
-              "expression": "application_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -8468,12 +8595,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "mime_type": {
-          "name": "mime_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "uploaded_by_id": {
           "name": "uploaded_by_id",
           "type": "text",
@@ -10269,51 +10390,6 @@
             },
             {
               "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "evaluation_jobs_job_idx": {
-          "name": "evaluation_jobs_job_idx",
-          "columns": [
-            {
-              "expression": "job_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "evaluation_jobs_candidate_idx": {
-          "name": "evaluation_jobs_candidate_idx",
-          "columns": [
-            {
-              "expression": "candidate_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "evaluation_jobs_application_idx": {
-          "name": "evaluation_jobs_application_idx",
-          "columns": [
-            {
-              "expression": "application_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -12433,7 +12509,6 @@
             }
           ],
           "isUnique": true,
-          "where": "\"jobs\".\"deleted_at\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -13075,36 +13150,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "mail_messages_candidate_idx": {
-          "name": "mail_messages_candidate_idx",
-          "columns": [
-            {
-              "expression": "candidate_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "mail_messages_application_idx": {
-          "name": "mail_messages_application_idx",
-          "columns": [
-            {
-              "expression": "application_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -13331,21 +13376,6 @@
           "columns": [
             {
               "expression": "candidate_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "mail_threads_application_idx": {
-          "name": "mail_threads_application_idx",
-          "columns": [
-            {
-              "expression": "application_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
