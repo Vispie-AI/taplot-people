@@ -3,7 +3,7 @@ import { betterAuth, APIError } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { genericOAuth, twoFactor } from "better-auth/plugins";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createLarkProvider } from "./lark";
 import {
   blocksStaffAuth,
@@ -18,6 +18,7 @@ const config = {
   tenant: "tenant_test",
   origin: "https://harly.example.test",
 };
+afterEach(() => vi.useRealTimers());
 const identity = {
   subject: "cli_test:tenant_test:ou_employee",
   openId: "ou_employee",
@@ -211,6 +212,10 @@ function cookieHeader(response: Response) {
 }
 
 it("native OAuth state/PKCE callback preserves the existing account and cannot replay", async () => {
+  // Better Auth samples expiry and creation time separately. Freeze Date only;
+  // real fetch timeouts and asynchronous native auth work must keep running.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-01-15T12:00:00Z"));
   const f = fixture();
   const now = new Date();
   const storage: Record<string, Record<string, unknown>[]> = {
