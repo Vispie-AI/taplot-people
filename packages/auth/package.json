@@ -8,6 +8,7 @@
     "./cookies": "./src/cookies.ts",
     "./next": "./src/next.ts",
     "./setup": "./src/setup.ts",
+    "./staff-policy": "./src/staff-policy.ts",
     "./server": "./src/auth.ts",
     "./saml-config": "./src/saml-config.ts"
   },

@@ -1,4 +1,5 @@
 import "server-only";
+import { isLarkOnly } from "@harly/auth/staff-policy";
 
 import { eq } from "drizzle-orm";
 
@@ -75,7 +76,7 @@ export async function evaluateConsentGate(
   if (!isIpAllowed(ip, ipAllowlist)) return { ok: false, block: { reason: "ip_blocked" } };
   const domains = Array.isArray(ws?.allowedDomains) ? (ws.allowedDomains as string[]) : [];
   if (!isEmailDomainAllowed(ctx.user.email, domains)) return { ok: false, block: { reason: "domain_blocked" } };
-  if (userRow?.mustChangePassword) return { ok: false, block: { reason: "must_change_password" } };
+  if (!isLarkOnly() && userRow?.mustChangePassword) return { ok: false, block: { reason: "must_change_password" } };
   if (
     mustSetUp2fa({
       workspaceRequires2fa: ws?.require2fa ?? false,

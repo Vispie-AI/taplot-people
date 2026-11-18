@@ -21,6 +21,7 @@ import {
 /** Message key for each method's label and helper text. */
 const METHOD_KEY = {
   password: "password",
+  lark: "lark",
   google: "google",
   microsoft: "microsoft",
   github: "github",
@@ -37,6 +38,7 @@ const METHOD_KEY = {
 function toConfiguredSet(configured: AvailableLoginMethods): Set<LoginMethod> {
   const set = new Set<LoginMethod>();
   if (configured.password) set.add("password");
+  if (configured.lark) set.add("lark");
   if (configured.passkey) set.add("passkey");
   if (configured.magicLink) set.add("magic_link");
   if (configured.sso) set.add("sso");

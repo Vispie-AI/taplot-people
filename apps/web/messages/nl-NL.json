@@ -803,7 +803,10 @@
     "subtitle": "Welkom terug. Vul je inloggegevens in om door te gaan.",
     "organizationListFailed": "Organisaties konden niet worden geladen.",
     "organizationActivateFailed": "Organisatie kon niet worden geactiveerd.",
-    "emailPlaceholder": "you@company.com"
+    "emailPlaceholder": "you@company.com",
+    "continueLark": "Continue with Lark",
+    "larkSubtitle": "Sign in with your company Lark account.",
+    "larkFailed": "Unable to sign in with Lark. Ask your workspace administrator to check your access."
   },
   "accessReset": {
     "back": "Terug naar inloggen",
@@ -3126,7 +3129,9 @@
         "otherSessionsRevoked": "Andere sessies ingetrokken.",
         "accountIdCopied": "Account-ID gekopieerd.",
         "uploadPrepareFailed": "Het uploaden kon niet worden voorbereid.",
-        "uploadRetryFailed": "Uploaden mislukt. Probeer het opnieuw."
+        "uploadRetryFailed": "Uploaden mislukt. Probeer het opnieuw.",
+        "larkTitle": "Lark sign-in",
+        "larkManaged": "Your sign-in identity is managed through Lark. Contact your workspace administrator to change the linked account."
       }
     },
     "applications": {
@@ -7613,6 +7618,10 @@
           "passkey": {
             "label": "Toegangssleutel",
             "hint": "WebAuthn-apparaat- of platformauthenticator."
+          },
+          "lark": {
+            "label": "Lark",
+            "hint": "Enterprise Lark sign-in for invited workspace members."
           }
         },
         "selectOneToast": "Selecteer minstens één ingestelde methode, of schakel de aanpassing uit.",

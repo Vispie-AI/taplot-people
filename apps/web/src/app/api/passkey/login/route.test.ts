@@ -242,3 +242,13 @@ describe("passkey login", () => {
     expect(mocks.consumeChallenge).not.toHaveBeenCalled();
   });
 });
+
+it("blocks both custom passkey entry points in Lark-only mode before creating a session", async () => {
+  vi.stubEnv("HARLY_STAFF_AUTH_MODE", "lark-only");
+  try {
+    mocks.createSession.mockClear();
+    expect((await GET(new Request("https://harly.test/api/passkey/login") as never)).status).toBe(403);
+    expect((await POST(new Request("https://harly.test/api/passkey/login", { method: "POST" }) as never)).status).toBe(403);
+    expect(mocks.createSession).not.toHaveBeenCalled();
+  } finally { vi.unstubAllEnvs(); }
+});

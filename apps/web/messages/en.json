@@ -765,6 +765,7 @@
     }
   },
   "accessLogin": {
+    "continueLark": "Continue with Lark",
     "invalidCredentials": "Invalid email or password.",
     "magicEmailRequired": "Enter your email before requesting a magic link.",
     "magicSendFailed": "Unable to send magic link. Check the email and try again.",
@@ -803,7 +804,9 @@
     "subtitle": "Welcome back. Enter your credentials to continue.",
     "organizationListFailed": "Unable to load organizations.",
     "organizationActivateFailed": "Unable to activate organization.",
-    "emailPlaceholder": "you@company.com"
+    "emailPlaceholder": "you@company.com",
+    "larkSubtitle": "Sign in with your company Lark account.",
+    "larkFailed": "Unable to sign in with Lark. Ask your workspace administrator to check your access."
   },
   "accessReset": {
     "back": "Back to sign in",
@@ -3126,7 +3129,9 @@
         "otherSessionsRevoked": "Other sessions revoked.",
         "accountIdCopied": "Account ID copied.",
         "uploadPrepareFailed": "Could not prepare the upload.",
-        "uploadRetryFailed": "Upload failed. Try again."
+        "uploadRetryFailed": "Upload failed. Try again.",
+        "larkTitle": "Lark sign-in",
+        "larkManaged": "Your sign-in identity is managed through Lark. Contact your workspace administrator to change the linked account."
       }
     },
     "applications": {
@@ -7613,6 +7618,10 @@
           "passkey": {
             "label": "Passkey",
             "hint": "WebAuthn device or platform authenticator."
+          },
+          "lark": {
+            "label": "Lark",
+            "hint": "Enterprise Lark sign-in for invited workspace members."
           }
         },
         "selectOneToast": "Select at least one configured method, or turn off customization.",

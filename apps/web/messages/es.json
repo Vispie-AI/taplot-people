@@ -803,7 +803,10 @@
     "subtitle": "Te damos la bienvenida. Ingresa tus credenciales para continuar.",
     "organizationListFailed": "No se pudieron cargar las organizaciones.",
     "organizationActivateFailed": "No se pudo activar la organización.",
-    "emailPlaceholder": "you@company.com"
+    "emailPlaceholder": "you@company.com",
+    "continueLark": "Continue with Lark",
+    "larkSubtitle": "Sign in with your company Lark account.",
+    "larkFailed": "Unable to sign in with Lark. Ask your workspace administrator to check your access."
   },
   "accessReset": {
     "back": "Volver a iniciar sesión",
@@ -3126,7 +3129,9 @@
         "otherSessionsRevoked": "Otras sesiones cerradas.",
         "accountIdCopied": "ID de la cuenta copiado.",
         "uploadPrepareFailed": "No se pudo preparar la subida.",
-        "uploadRetryFailed": "La subida falló. Inténtalo de nuevo."
+        "uploadRetryFailed": "La subida falló. Inténtalo de nuevo.",
+        "larkTitle": "Lark sign-in",
+        "larkManaged": "Your sign-in identity is managed through Lark. Contact your workspace administrator to change the linked account."
       }
     },
     "applications": {
@@ -7613,6 +7618,10 @@
           "passkey": {
             "label": "Clave de acceso",
             "hint": "Dispositivo o autenticador de plataforma WebAuthn."
+          },
+          "lark": {
+            "label": "Lark",
+            "hint": "Enterprise Lark sign-in for invited workspace members."
           }
         },
         "selectOneToast": "Selecciona al menos un método configurado o desactiva la personalización.",

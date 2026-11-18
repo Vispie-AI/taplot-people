@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { isLarkOnly } from "@harly/auth/staff-policy";
 
 import { auth } from "@/lib/auth";
 import { AcceptInvitationButton } from "@/features/workspaces/AcceptInvitationButton";
@@ -114,7 +115,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
                 {t("expired")}
               </div>
             ) : !session ? (
-              hasAccount ? (
+              hasAccount || isLarkOnly() ? (
                 <div className="space-y-3">
                   <Link
                     href={`/login?redirect=${encodeURIComponent(`/invite/${invitationId}`)}`}

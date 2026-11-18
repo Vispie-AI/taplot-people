@@ -1,4 +1,5 @@
 import { isDemoMode } from "@harly/config";
+import { isLarkOnly } from "@harly/auth/staff-policy";
 import { getTranslations } from "next-intl/server";
 
 import { getWorkspaceContext } from "@/features/workspaces/context";
@@ -42,6 +43,7 @@ export default async function AccountPage() {
         demoLocked={demoLocked}
       />
       <AccountSettingsPanel
+        larkManaged={isLarkOnly()}
         demoLocked={demoLocked}
         user={{
           id: user.id,

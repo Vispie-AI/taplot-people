@@ -172,3 +172,16 @@ describe("demoSandboxSettings", () => {
     ).toEqual({ ttlMinutes: 240, maxActive: 40 });
   });
 });
+
+describe("Lark staff configuration", () => {
+  const lark = { LARK_CLIENT_ID: "cli_test", LARK_CLIENT_SECRET: "test-only-secret", LARK_TENANT_KEY: "tenant_test" };
+  it("leaves ordinary installs in default mode", () => {
+    expect(loadHarlyConfig({ ...production }).HARLY_STAFF_AUTH_MODE).toBe("default");
+  });
+  it("requires complete credentials for either Lark button or Lark-only mode", () => {
+    expect(() => loadHarlyConfig({ ...production, HARLY_STAFF_AUTH_MODE: "lark-only" })).toThrow();
+    expect(() => loadHarlyConfig({ ...production, LARK_CLIENT_ID: "cli_test" })).toThrow();
+    expect(loadHarlyConfig({ ...production, ...lark, HARLY_STAFF_AUTH_MODE: "lark-only" }).HARLY_STAFF_AUTH_MODE).toBe("lark-only");
+    expect(() => loadHarlyConfig({ ...production, ...lark, HARLY_STAFF_AUTH_MODE: "unknown" })).toThrow();
+  });
+});

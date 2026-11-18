@@ -13,6 +13,10 @@ operators. How to cut a release is in [RELEASING.md](RELEASING.md). The
 
 ## [Unreleased]
 
+### Added
+
+- Optional Lark staff sign-in with enterprise identity and existing membership checks, plus a server-enforced Lark-only mode that preserves existing accounts and invitation roles. Candidate portal login and API keys remain independent.
+
 ### Changed
 
 - Upgrade the Taplot People deployment to upstream Harly 0.5.1 while retaining its existing checksum-verified BOSS resume import endpoint. Append the upstream audit migration after the already-applied integration migration.

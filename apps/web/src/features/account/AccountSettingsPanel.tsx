@@ -315,11 +315,13 @@ export function AccountSettingsPanel({
   securitySlot,
   sessions,
   demoLocked = false,
+  larkManaged = false,
 }: {
   user: AccountUser;
   securitySlot?: React.ReactNode;
   sessions: SessionDevice[];
   demoLocked?: boolean;
+  larkManaged?: boolean;
 }) {
   const router = useRouter();
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -1084,6 +1086,9 @@ export function AccountSettingsPanel({
 
         {/* ─── SECURITY TAB ─── */}
         <TabsContent value="security" className="mt-6 space-y-6">
+          {larkManaged ? <SectionCard title={t("larkTitle")} description={t("larkManaged")}>
+            <p className="text-sm font-medium">{user.email}</p>
+          </SectionCard> : <>
           <SectionCard
             title={t("emailTitle")}
             description={t("emailDescription")}
@@ -1174,6 +1179,7 @@ export function AccountSettingsPanel({
             </div>
           </SectionCard>
 
+          </>}
           {securitySlot}
         </TabsContent>
 

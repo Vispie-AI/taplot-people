@@ -6,13 +6,13 @@ import { AuthShell, AuthCard } from "../_components/auth-shell";
 import { LoginForm } from "./_components/login-form";
 
 type LoginPageProps = {
-  searchParams: Promise<{ redirect?: string }>;
+  searchParams: Promise<{ redirect?: string; larkError?: string }>;
 };
 
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const [{ redirect }, methods, branding, t] = await Promise.all([
+  const [{ redirect, larkError }, methods, branding, t] = await Promise.all([
     searchParams,
     getAvailableLoginMethods(),
     getAuthBranding(),
@@ -23,9 +23,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     <AuthShell branding={branding}>
       <AuthCard
         title={t("title")}
-        subtitle={t("subtitle")}
+        subtitle={methods.lark && !methods.password && !methods.passkey && !methods.magicLink && !methods.sso && methods.social.length === 0 ? t("larkSubtitle") : t("subtitle")}
       >
-        <LoginForm redirect={safeRedirectPath(redirect)} methods={methods} />
+        <LoginForm redirect={safeRedirectPath(redirect)} methods={methods} larkError={larkError === "1"} />
       </AuthCard>
     </AuthShell>
   );
