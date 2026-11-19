@@ -478,6 +478,9 @@ jobs:
       - name: Concurrent first-owner bootstrap
         run: RUN_SETUP_INTEGRATION=1 pnpm --filter @harly/auth exec vitest run src/setup.integration.test.ts
 
+      - name: Verify Lark staff enrollment against PostgreSQL
+        run: RUN_LARK_PROVISION_INTEGRATION=1 pnpm --filter @harly/auth exec vitest run src/lark-membership.integration.test.ts
+
   distribution:
     name: Image and CLI distribution
     runs-on: ubuntu-latest

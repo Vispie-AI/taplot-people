@@ -1390,6 +1390,7 @@ EMAIL_FROM=Harly <noreply@mail.example.com>
 
 # Sign-in and integrations (leave empty to disable)
 HARLY_STAFF_AUTH_MODE=default
+HARLY_LARK_AUTO_PROVISION=disabled
 LARK_CLIENT_ID=
 LARK_CLIENT_SECRET=
 LARK_TENANT_KEY=

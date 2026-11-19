@@ -359,12 +359,17 @@ for concrete examples.
 | `LARK_CLIENT_SECRET` | Client secret, injected by the operator's secret manager. |
 | `LARK_TENANT_KEY` | Exact enterprise tenant allowed to sign in. |
 | `HARLY_STAFF_AUTH_MODE` | `default` preserves existing methods; `lark-only` restricts staff authentication on the server. |
+| `HARLY_LARK_AUTO_PROVISION` | `disabled` requires existing membership or an invitation. `admin` creates a Harly Administrator on the first eligible Lark sign-in without an invitation. |
 
 Register `https://harly.example.com/api/auth/callback/lark` using the installation's actual `HARLY_URL`.
 The Lark application must have published access to user identity, enterprise email, directory user status and application visibility checks.
 Directory fields require `contact:user.employee:readonly`. Visibility checks require `admin:app.info:readonly` (or an existing `application:application:self_manage` grant). Prefer the read-only grant. Inject `LARK_CLIENT_SECRET` into the Compose process environment from the secret manager on each container recreation; do not save its value in a tracked file or shell history.
 
 All three Lark credentials are required together; partial configuration and combining Lark-only mode with demo mode fail startup validation.
+
+Set `HARLY_LARK_AUTO_PROVISION=admin` to enroll active employees from the configured Lark tenant who are within the application's published availability. Administrator includes access to candidate data, recruiting workflows, member management, and workspace settings. Only existing Owners manage workspace ownership. Existing users keep their roles and an inactive, suspended, or removed member does not regain access through enrollment. An existing unlinked Harly account needs an active membership to sign in. The setting requires all three Lark credentials and cannot be combined with demo mode.
+
+Keep `HARLY_STAFF_AUTH_MODE=default` and leave an existing recovery account unlinked to Lark if it should continue to use its password. While automatic enrollment is enabled, Lark-bound staff authenticate through Lark and keep their Lark binding. New staff sessions expire after eight hours and cannot refresh silently. Turning enrollment off stops new automatic accounts. To remove a past grant, suspend the member in Harly and update the employee's Lark access as appropriate.
 
 Lark authenticates a person; Harly still controls workspace access. Sign-in requires an active Harly membership or a valid email invitation, an active directory entry, the configured tenant and application visibility. Only an enterprise-managed mailbox can bind an existing account; personal email and display names never authorize linking. Once linked, the identity includes the application, tenant and immutable open ID. Reassigning an email cannot replace an existing Lark binding. No role, ownership, candidate or API-key records are rewritten.
 

@@ -30,7 +30,7 @@ import {
 import { shouldBlockAuthPath } from "./demo-guard";
 import { blocksStaffAuth, isLarkOnly, allowsLarkSessionCreation } from "./staff-policy";
 import { createLarkProvider } from "./lark";
-import { authorizeLarkMember } from "./lark-membership";
+import { authorizeLarkMember, isLarkBinding, isLarkBoundStaffUser } from "./lark-membership";
 
 const config = loadHarlyConfig(
   process.env.NEXT_PHASE === "phase-production-build"
@@ -38,6 +38,8 @@ const config = loadHarlyConfig(
     : process.env,
 );
 const appUrl = config.HARLY_URL;
+const provisionLarkAdmin = config.HARLY_LARK_AUTO_PROVISION === "admin";
+const shortStaffSessions = isLarkOnly() || provisionLarkAdmin;
 const allowConsoleAuthEmailFallback =
   process.env.NODE_ENV !== "production" &&
   process.env.AUTH_EMAIL_CONSOLE_FALLBACK === "true";
@@ -391,13 +393,29 @@ export const auth = betterAuth({
       if (isLarkOnly() && blocksStaffAuth(ctx.path, ctx.body, ctx.params)) {
         throw new APIError("FORBIDDEN", { message: "Staff must sign in with Lark." });
       }
+      if (
+        provisionLarkAdmin &&
+        ctx.path === "/unlink-account" &&
+        typeof ctx.body?.accountId === "string" &&
+        await isLarkBinding(ctx.body.accountId)
+      ) {
+        throw new APIError("FORBIDDEN", { message: "Staff must sign in with Lark." });
+      }
     }),
   },
   databaseHooks: {
     session: {
       create: {
         before: async (session, context) => {
-          if (isLarkOnly() && !allowsLarkSessionCreation(context?.path, context?.params, session.userId, context?.context.session?.session.userId)) {
+          const larkSession = allowsLarkSessionCreation(
+            context?.path,
+            context?.params,
+            session.userId,
+            context?.context.session?.session.userId,
+          );
+          if (!larkSession && (
+            isLarkOnly() || (provisionLarkAdmin && await isLarkBoundStaffUser(session.userId))
+          )) {
             throw new APIError("FORBIDDEN", { message: "Staff must sign in with Lark." });
           }
           return { data: session };
@@ -424,10 +442,18 @@ export const auth = betterAuth({
     },
   },
   plugins: [
-    genericOAuth({ config: config.LARK_CLIENT_ID && config.LARK_CLIENT_SECRET && config.LARK_TENANT_KEY ? [
-      createLarkProvider({ appId: config.LARK_CLIENT_ID, secret: config.LARK_CLIENT_SECRET,
-        tenant: config.LARK_TENANT_KEY, origin: appUrl }, authorizeLarkMember),
-    ] : [] }),
+    genericOAuth({
+      config: config.LARK_CLIENT_ID && config.LARK_CLIENT_SECRET && config.LARK_TENANT_KEY
+        ? [
+            createLarkProvider({
+              appId: config.LARK_CLIENT_ID,
+              secret: config.LARK_CLIENT_SECRET,
+              tenant: config.LARK_TENANT_KEY,
+              origin: appUrl,
+            }, (identity) => authorizeLarkMember(identity, provisionLarkAdmin)),
+          ]
+        : [],
+    }),
     organization({
       organizationHooks: {
         beforeCreateOrganization: async () => {
@@ -491,11 +517,11 @@ export const auth = betterAuth({
     },
   },
   session: {
-    disableSessionRefresh: isLarkOnly(),
-    expiresIn: isLarkOnly() ? 60 * 60 * 8 : 60 * 60 * 24 * 30,
-    updateAge: isLarkOnly() ? 60 * 60 * 8 : 60 * 60 * 24,
+    disableSessionRefresh: shortStaffSessions,
+    expiresIn: shortStaffSessions ? 60 * 60 * 8 : 60 * 60 * 24 * 30,
+    updateAge: shortStaffSessions ? 60 * 60 * 8 : 60 * 60 * 24,
     cookieCache: {
-      enabled: !isLarkOnly(),
+      enabled: !shortStaffSessions,
       maxAge: 60 * 5,
     },
   },
