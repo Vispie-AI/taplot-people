@@ -1,7 +1,8 @@
 import { betterAuth, APIError } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
-import { magicLink, organization, twoFactor } from "better-auth/plugins";
+import { genericOAuth, magicLink, organization, twoFactor } from "better-auth/plugins";
+import { createAuthMiddleware } from "better-auth/api";
 import { sso } from "@better-auth/sso";
 
 import {
@@ -26,7 +27,10 @@ import {
   buildStaffMagicLinkAuthMessage,
   resolveAuthRecipientEmailLocale,
 } from "./auth-logic";
-import { demoGuardMiddleware } from "./demo-guard";
+import { shouldBlockAuthPath } from "./demo-guard";
+import { blocksStaffAuth, isLarkOnly, allowsLarkSessionCreation } from "./staff-policy";
+import { createLarkProvider } from "./lark";
+import { authorizeLarkMember } from "./lark-membership";
 
 const config = loadHarlyConfig(
   process.env.NEXT_PHASE === "phase-production-build"
@@ -380,9 +384,26 @@ export const auth = betterAuth({
   // shared demo account before they run. No-op unless DEMO_MODE=true, so normal
   // installs are unaffected. See ./demo-guard for the blocked path list.
   hooks: {
-    before: demoGuardMiddleware,
+    before: createAuthMiddleware(async (ctx) => {
+      if (shouldBlockAuthPath(ctx.path)) {
+        throw new APIError("FORBIDDEN", { message: "This action is disabled in the demo." });
+      }
+      if (isLarkOnly() && blocksStaffAuth(ctx.path, ctx.body, ctx.params)) {
+        throw new APIError("FORBIDDEN", { message: "Staff must sign in with Lark." });
+      }
+    }),
   },
   databaseHooks: {
+    session: {
+      create: {
+        before: async (session, context) => {
+          if (isLarkOnly() && !allowsLarkSessionCreation(context?.path, context?.params, session.userId, context?.context.session?.session.userId)) {
+            throw new APIError("FORBIDDEN", { message: "Staff must sign in with Lark." });
+          }
+          return { data: session };
+        },
+      },
+    },
     user: {
       create: {
         before: async (newUser, context) => {
@@ -403,6 +424,10 @@ export const auth = betterAuth({
     },
   },
   plugins: [
+    genericOAuth({ config: config.LARK_CLIENT_ID && config.LARK_CLIENT_SECRET && config.LARK_TENANT_KEY ? [
+      createLarkProvider({ appId: config.LARK_CLIENT_ID, secret: config.LARK_CLIENT_SECRET,
+        tenant: config.LARK_TENANT_KEY, origin: appUrl }, authorizeLarkMember),
+    ] : [] }),
     organization({
       organizationHooks: {
         beforeCreateOrganization: async () => {
@@ -437,8 +462,11 @@ export const auth = betterAuth({
     nextCookies(),
   ],
   socialProviders: await getSocialProviders(),
+  // Only enterprise-managed, live-verified Lark email can migrate an existing
+  // invite-only account in this mode. Other provider entry points are blocked.
+  ...(isLarkOnly() ? { account: { accountLinking: { requireLocalEmailVerified: false } } } : {}),
   emailAndPassword: {
-    enabled: true,
+    enabled: !isLarkOnly(),
     // Verification is encouraged via the dashboard banner, not enforced —
     // self-hosters can flip this once their email sender is configured.
     requireEmailVerification: false,
@@ -459,14 +487,15 @@ export const auth = betterAuth({
   },
   user: {
     changeEmail: {
-      enabled: true,
+      enabled: !isLarkOnly(),
     },
   },
   session: {
-    expiresIn: 60 * 60 * 24 * 30,
-    updateAge: 60 * 60 * 24,
+    disableSessionRefresh: isLarkOnly(),
+    expiresIn: isLarkOnly() ? 60 * 60 * 8 : 60 * 60 * 24 * 30,
+    updateAge: isLarkOnly() ? 60 * 60 * 8 : 60 * 60 * 24,
     cookieCache: {
-      enabled: true,
+      enabled: !isLarkOnly(),
       maxAge: 60 * 5,
     },
   },

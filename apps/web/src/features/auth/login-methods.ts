@@ -10,6 +10,7 @@
 /** Every staff login method Harly knows how to render. */
 export const LOGIN_METHODS = [
   "password",
+  "lark",
   "google",
   "microsoft",
   "github",
@@ -37,6 +38,8 @@ export type SocialLoginMethod = (typeof SOCIAL_LOGIN_METHODS)[number];
  * allow-list. Every field here means "safe to show this control".
  */
 export type AvailableLoginMethods = {
+  /** Enterprise Lark login, configured independently of portal OAuth. */
+  lark?: boolean;
   /** Email + password form. */
   password: boolean;
   /** Passkey (WebAuthn) button. Still additionally gated client-side by
@@ -58,6 +61,7 @@ export type AvailableLoginMethods = {
 export function isSsoOnly(methods: AvailableLoginMethods): boolean {
   return (
     methods.sso &&
+    !methods.lark &&
     !methods.password &&
     !methods.magicLink &&
     !methods.passkey &&
@@ -70,6 +74,7 @@ export function hasNoMethods(methods: AvailableLoginMethods): boolean {
   return (
     !methods.password &&
     !methods.passkey &&
+    !methods.lark &&
     !methods.magicLink &&
     !methods.sso &&
     methods.social.length === 0
@@ -111,6 +116,7 @@ export function applyLoginMethodAllowList(
   }
 
   return {
+    ...(configured.lark ? { lark: allow.has("lark") } : {}),
     password: configured.password && allow.has("password"),
     passkey: configured.passkey && allow.has("passkey"),
     magicLink: configured.magicLink && allow.has("magic_link"),

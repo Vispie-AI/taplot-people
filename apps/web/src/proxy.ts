@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getSessionCookie } from "@harly/auth/cookies";
+import { isLarkOnly } from "@harly/auth/staff-policy";
 
 import { mustSetUp2fa } from "@/lib/two-factor";
 import { detectSuspiciousSession, getTrustedClientIp, isEmailDomainAllowed, isIpAllowed } from "@/server/security/policy";
@@ -272,6 +273,7 @@ export async function proxy(request: NextRequest) {
         // must replace the owner-set temporary password before anything else.
         if (
           !skipSetupGates &&
+          !isLarkOnly() &&
           userRow?.mustChangePassword &&
           !CHANGE_PASSWORD_EXEMPT.some((p) => pathname.startsWith(p))
         ) {

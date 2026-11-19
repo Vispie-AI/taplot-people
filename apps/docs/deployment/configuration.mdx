@@ -349,3 +349,29 @@ through the bundled Caddy proxy or a single reverse proxy that appends to
 See
 [proxy modes](/self-hosting/proxy-modes#trust-your-reverse-proxy-for-client-ips)
 for concrete examples.
+
+
+## Lark staff sign-in
+
+| Variable | Purpose |
+| --- | --- |
+| `LARK_CLIENT_ID` | Enterprise Lark application's client ID. |
+| `LARK_CLIENT_SECRET` | Client secret, injected by the operator's secret manager. |
+| `LARK_TENANT_KEY` | Exact enterprise tenant allowed to sign in. |
+| `HARLY_STAFF_AUTH_MODE` | `default` preserves existing methods; `lark-only` restricts staff authentication on the server. |
+
+Register `https://harly.example.com/api/auth/callback/lark` using the installation's actual `HARLY_URL`.
+The Lark application must have published access to user identity, enterprise email, directory user status and application visibility checks.
+Directory fields require `contact:user.employee:readonly`. Visibility checks require `admin:app.info:readonly` (or an existing `application:application:self_manage` grant). Prefer the read-only grant. Inject `LARK_CLIENT_SECRET` into the Compose process environment from the secret manager on each container recreation; do not save its value in a tracked file or shell history.
+
+All three Lark credentials are required together; partial configuration and combining Lark-only mode with demo mode fail startup validation.
+
+Lark authenticates a person; Harly still controls workspace access. Sign-in requires an active Harly membership or a valid email invitation, an active directory entry, the configured tenant and application visibility. Only an enterprise-managed mailbox can bind an existing account; personal email and display names never authorize linking. Once linked, the identity includes the application, tenant and immutable open ID. Reassigning an email cannot replace an existing Lark binding. No role, ownership, candidate or API-key records are rewritten.
+
+For rollout, keep `HARLY_STAFF_AUTH_MODE=default`. An already signed-in administrator can open `/login` and choose **Continue with Lark** to link their existing account. Verify a new Lark sign-in after signing out, invited colleague onboarding and denied access for an uninvited employee. Then enable `lark-only` and revoke pre-cutover staff sessions through the operator's normal session-management procedure. New sign-ins must enter through the Lark callback, including protection against unfinished recovery challenges from before cutover. Native two-factor changes may rotate an already authenticated session for the same user; they cannot finish a recovery login without that session. Existing temporary-password flags are retained for rollback and do not force a disabled credential change in Lark-only mode. Cookie session caching is disabled in this mode; new sessions expire after eight hours without silent refresh and require another live Lark sign-in.
+
+Lark-only mode rejects password sign-in/signup/reset, magic links, other social/enterprise SSO and custom passkey login on the server. Invited colleagues use their invitation's **Sign in and accept** flow; its existing role is preserved. Send email invitations rather than password-based onboarding or shareable account-creation links. Candidate portal authentication and scoped machine API keys remain independent.
+
+Rollback restores `HARLY_STAFF_AUTH_MODE=default` and the previously qualified runtime. Existing account IDs, memberships and credentials remain intact. Validate recovery access before ending an authenticated administrator session; a missing scope or mismatched enterprise mailbox must be corrected rather than bypassed.
+
+![Lark-only staff login with synthetic preview configuration](/images/features/lark-staff-signin.jpg)

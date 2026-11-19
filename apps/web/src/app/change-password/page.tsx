@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { isLarkOnly } from "@harly/auth/staff-policy";
 import { eq } from "drizzle-orm";
 
 import { auth } from "@/lib/auth";
@@ -10,6 +11,7 @@ import { ChangePasswordForm } from "./_components/change-password-form";
 export const dynamic = "force-dynamic";
 
 export default async function ChangePasswordPage() {
+  if (isLarkOnly()) redirect("/dashboard");
   const t = await getTranslations("accessChangePassword");
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {

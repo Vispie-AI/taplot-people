@@ -147,3 +147,14 @@ describe("proxy: setup gates on the security pages", () => {
     expect(redirectPath(response)).toBe("/setup-2fa");
   });
 });
+
+
+it("does not force a disabled local credential change in Lark-only mode", async () => {
+  vi.stubEnv("HARLY_STAFF_AUTH_MODE", "lark-only");
+  try {
+    setLookups({ mustChangePassword: true });
+    expect((await proxy(request("/dashboard"))).headers.get("location")).toBeNull();
+    setLookups({ mustChangePassword: true, require2fa: true });
+    expect(redirectPath(await proxy(request("/dashboard")))).toBe("/setup-2fa");
+  } finally { vi.unstubAllEnvs(); }
+});

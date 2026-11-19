@@ -7,6 +7,7 @@ import {
 import { eq } from "drizzle-orm";
 import { db, passkeys, user } from "@harly/db";
 import { isDemoMode } from "@harly/config";
+import { isLarkOnly } from "@harly/auth/staff-policy";
 import { auth } from "@/lib/auth";
 import { createLogger } from "@/lib/logger";
 import { RP_ID, ORIGIN, storeChallenge, consumeChallenge } from "@/lib/passkey";
@@ -80,6 +81,7 @@ async function generateOptions(
 
 // GET , generate authentication options for passkey login (no session required).
 export async function GET(req: NextRequest) {
+  if (isLarkOnly()) return NextResponse.json({ error: "Staff must sign in with Lark." }, { status: 403 });
   if (isDemoMode()) return demoBlockedResponse();
   try {
     await enforceRateLimit(`public:passkey-login:${clientIp(req)}`, {
@@ -95,6 +97,7 @@ export async function GET(req: NextRequest) {
 
 // POST , verify authentication response and create session for passkey login.
 export async function POST(req: NextRequest) {
+  if (isLarkOnly()) return NextResponse.json({ error: "Staff must sign in with Lark." }, { status: 403 });
   if (isDemoMode()) return demoBlockedResponse();
   try {
     await enforceRateLimit(`public:passkey-login:${clientIp(req)}`, {

@@ -70,20 +70,22 @@ const SOCIAL_META: Record<
 };
 
 /** Which action currently owns the loading state (so only its button spins). */
-type PendingAction = null | "password" | "magic_link" | "sso" | "passkey" | SocialLoginMethod;
+type PendingAction = null | "password" | "magic_link" | "sso" | "passkey" | "lark" | SocialLoginMethod;
 
 export function LoginForm({
   redirect,
   methods = DEFAULT_METHODS,
+  larkError = false,
 }: {
   redirect?: string;
   methods?: AvailableLoginMethods;
+  larkError?: boolean;
 }) {
   const t = useTranslations("accessLogin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => larkError ? t("larkFailed") : null);
   const [sent, setSent] = useState(false);
   const [pending, setPending] = useState<PendingAction>(null);
   const [isPasskeySupported, setIsPasskeySupported] = useState(false);
@@ -186,6 +188,22 @@ export function LoginForm({
       // On success the browser redirects; keep the spinner until it does.
     } catch {
       setError(t("socialFailed", {provider: SOCIAL_META[provider].label}));
+      setPending(null);
+    }
+  }
+
+  async function continueWithLark() {
+    setError(null);
+    setPending("lark");
+    try {
+      const current = await authClient.getSession();
+      if (current.error) throw new Error("Session unavailable");
+      const result = current.data?.user
+        ? await authClient.linkSocial({ provider: "lark", callbackURL, errorCallbackURL: "/login?larkError=1" })
+        : await authClient.signIn.social({ provider: "lark", callbackURL, errorCallbackURL: "/login?larkError=1" });
+      if (result.error) throw new Error("Lark unavailable");
+    } catch {
+      setError(t("larkFailed"));
       setPending(null);
     }
   }
@@ -324,6 +342,10 @@ export function LoginForm({
 
   // Build the ordered alternative-methods list (social + SSO + magic link).
   const altMethods: AuthMethodDescriptor[] = [];
+  if (methods.lark) {
+    altMethods.push({ id: "lark", label: t("continueLark"), icon: <SsoIcon />,
+      onSelect: continueWithLark, loading: pending === "lark" });
+  }
   for (const provider of methods.social) {
     altMethods.push({
       id: provider as AuthMethodId,

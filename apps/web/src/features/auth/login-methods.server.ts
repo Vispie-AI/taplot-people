@@ -1,4 +1,5 @@
 import "server-only";
+import { isLarkConfigured, isLarkOnly } from "@harly/auth/staff-policy";
 
 import { and, eq } from "drizzle-orm";
 import {
@@ -39,6 +40,7 @@ const log = createLogger("auth:login-methods");
  * (email + password only) so the login screen always renders something.
  */
 export async function getAvailableLoginMethods(): Promise<AvailableLoginMethods> {
+  if (isLarkOnly()) return larkOnlyMethods();
   try {
     const { configured, allow } = await resolveLoginMethodState();
     return applyLoginMethodAllowList(configured, allow);
@@ -61,6 +63,7 @@ export async function getAvailableLoginMethods(): Promise<AvailableLoginMethods>
  * password-only.
  */
 export async function getConfiguredLoginMethods(): Promise<AvailableLoginMethods> {
+  if (isLarkOnly()) return larkOnlyMethods();
   try {
     const { configured } = await resolveLoginMethodState();
     return configured;
@@ -83,6 +86,7 @@ export async function getConfiguredLoginMethods(): Promise<AvailableLoginMethods
  * the reset form from instances that do have email.
  */
 export async function isStaffEmailDeliveryConfigured(): Promise<boolean> {
+  if (isLarkOnly()) return false;
   try {
     const { configured } = await resolveLoginMethodState();
     return configured.magicLink;
@@ -115,6 +119,7 @@ async function resolveLoginMethodState(): Promise<{
     .limit(1);
 
   const configured: AvailableLoginMethods = {
+    ...(isLarkConfigured() ? { lark: true } : {}),
     // Email + password is always a valid staff credential in Harly.
     password: true,
     // Passkey has no server-side config; it is browser-capability gated in
@@ -127,6 +132,11 @@ async function resolveLoginMethodState(): Promise<{
 
   const allow = parseEnabledLoginMethods(settings?.enabledLoginMethods);
   return { configured, allow };
+}
+
+function larkOnlyMethods(): AvailableLoginMethods {
+  return { password: false, passkey: false, magicLink: false, sso: false,
+    social: [], lark: isLarkConfigured() };
 }
 
 /**

@@ -66,6 +66,10 @@ const envSchema = z
     CRON_SECRET: optionalString,
     HARLY_SETUP_SECRET: optionalString,
     HARLY_INITIAL_ADMIN_EMAIL: optionalEmail,
+    HARLY_STAFF_AUTH_MODE: z.enum(["default", "lark-only"]).default("default"),
+    LARK_CLIENT_ID: optionalString,
+    LARK_CLIENT_SECRET: optionalString,
+    LARK_TENANT_KEY: optionalString,
     /** Company name the operator typed in `harly init`; prefills the first-run workspace name. */
     HARLY_ORG_NAME: optionalString,
     HARLY_VERSION: z.string().trim().default("0.1.0-dev"),
@@ -136,6 +140,15 @@ const envSchema = z
     ),
   })
   .superRefine((env, ctx) => {
+    const larkKeys = ["LARK_CLIENT_ID", "LARK_CLIENT_SECRET", "LARK_TENANT_KEY"] as const;
+    if (env.HARLY_STAFF_AUTH_MODE === "lark-only" || larkKeys.some((key) => Boolean(env[key]))) {
+      for (const key of larkKeys) if (!env[key]) {
+        ctx.addIssue({ code: "custom", path: [key], message: "is required for Lark staff authentication" });
+      }
+    }
+    if (env.HARLY_STAFF_AUTH_MODE === "lark-only" && env.DEMO_MODE) {
+      ctx.addIssue({ code: "custom", path: ["HARLY_STAFF_AUTH_MODE"], message: "cannot be combined with demo mode" });
+    }
     const url = env.HARLY_URL ?? env.NEXT_PUBLIC_APP_URL ?? env.BETTER_AUTH_URL;
     if (!url) {
       ctx.addIssue({

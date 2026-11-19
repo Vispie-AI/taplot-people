@@ -18,6 +18,7 @@
 import type { ReactNode } from "react";
 
 export type AuthMethodId =
+  | "lark"
   | "google"
   | "linkedin"
   | "microsoft"

@@ -176,3 +176,21 @@ describe("login methods discovery", () => {
     await expect(isStaffEmailDeliveryConfigured()).resolves.toBe(true);
   });
 });
+
+describe("Lark-only staff discovery", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it("does not query the database or fall back to credentials", async () => {
+    vi.stubEnv("HARLY_STAFF_AUTH_MODE", "lark-only");
+    vi.stubEnv("LARK_CLIENT_ID", "cli_test"); vi.stubEnv("LARK_CLIENT_SECRET", "test-only-secret"); vi.stubEnv("LARK_TENANT_KEY", "tenant_test");
+    mocks.queue = [new Error("database unavailable")];
+    const expected = { password: false, passkey: false, magicLink: false, sso: false, social: [], lark: true };
+    expect(await getAvailableLoginMethods()).toEqual(expected);
+    expect(await getConfiguredLoginMethods()).toEqual(expected);
+    expect(await isStaffEmailDeliveryConfigured()).toBe(false);
+    expect(mocks.queue).toHaveLength(1);
+  });
+  it("has no credential fallback when Lark credentials are missing", async () => {
+    vi.stubEnv("HARLY_STAFF_AUTH_MODE", "lark-only"); vi.stubEnv("LARK_CLIENT_SECRET", "");
+    expect(await getAvailableLoginMethods()).toEqual({ password: false, passkey: false, magicLink: false, sso: false, social: [], lark: false });
+  });
+});

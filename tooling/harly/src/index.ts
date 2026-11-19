@@ -1389,6 +1389,10 @@ RESEND_API_KEY=
 EMAIL_FROM=Harly <noreply@mail.example.com>
 
 # Sign-in and integrations (leave empty to disable)
+HARLY_STAFF_AUTH_MODE=default
+LARK_CLIENT_ID=
+LARK_CLIENT_SECRET=
+LARK_TENANT_KEY=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 MICROSOFT_CLIENT_ID=
