@@ -15,6 +15,8 @@ operators. How to cut a release is in [RELEASING.md](RELEASING.md). The
 
 ### Added
 
+- Operators can opt in to automatic Harly Administrator enrollment on the first verified Lark sign-in. Existing workspace roles and the default authentication mode remain available.
+
 - Optional Lark staff sign-in with enterprise identity and existing membership checks, plus a server-enforced Lark-only mode that preserves existing accounts and invitation roles. Candidate portal login and API keys remain independent.
 
 ### Changed

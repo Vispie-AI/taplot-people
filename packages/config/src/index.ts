@@ -67,6 +67,7 @@ const envSchema = z
     HARLY_SETUP_SECRET: optionalString,
     HARLY_INITIAL_ADMIN_EMAIL: optionalEmail,
     HARLY_STAFF_AUTH_MODE: z.enum(["default", "lark-only"]).default("default"),
+    HARLY_LARK_AUTO_PROVISION: z.enum(["disabled", "admin"]).default("disabled"),
     LARK_CLIENT_ID: optionalString,
     LARK_CLIENT_SECRET: optionalString,
     LARK_TENANT_KEY: optionalString,
@@ -141,13 +142,15 @@ const envSchema = z
   })
   .superRefine((env, ctx) => {
     const larkKeys = ["LARK_CLIENT_ID", "LARK_CLIENT_SECRET", "LARK_TENANT_KEY"] as const;
-    if (env.HARLY_STAFF_AUTH_MODE === "lark-only" || larkKeys.some((key) => Boolean(env[key]))) {
+    const larkOnly = env.HARLY_STAFF_AUTH_MODE === "lark-only";
+    const provisionLarkAdmin = env.HARLY_LARK_AUTO_PROVISION === "admin";
+    if (larkOnly || provisionLarkAdmin || larkKeys.some((key) => Boolean(env[key]))) {
       for (const key of larkKeys) if (!env[key]) {
         ctx.addIssue({ code: "custom", path: [key], message: "is required for Lark staff authentication" });
       }
     }
-    if (env.HARLY_STAFF_AUTH_MODE === "lark-only" && env.DEMO_MODE) {
-      ctx.addIssue({ code: "custom", path: ["HARLY_STAFF_AUTH_MODE"], message: "cannot be combined with demo mode" });
+    if ((larkOnly || provisionLarkAdmin) && env.DEMO_MODE) {
+      ctx.addIssue({ code: "custom", path: [larkOnly ? "HARLY_STAFF_AUTH_MODE" : "HARLY_LARK_AUTO_PROVISION"], message: "cannot be combined with demo mode" });
     }
     const url = env.HARLY_URL ?? env.NEXT_PUBLIC_APP_URL ?? env.BETTER_AUTH_URL;
     if (!url) {

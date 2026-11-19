@@ -177,11 +177,22 @@ describe("Lark staff configuration", () => {
   const lark = { LARK_CLIENT_ID: "cli_test", LARK_CLIENT_SECRET: "test-only-secret", LARK_TENANT_KEY: "tenant_test" };
   it("leaves ordinary installs in default mode", () => {
     expect(loadHarlyConfig({ ...production }).HARLY_STAFF_AUTH_MODE).toBe("default");
+    expect(loadHarlyConfig({ ...production }).HARLY_LARK_AUTO_PROVISION).toBe("disabled");
   });
   it("requires complete credentials for either Lark button or Lark-only mode", () => {
     expect(() => loadHarlyConfig({ ...production, HARLY_STAFF_AUTH_MODE: "lark-only" })).toThrow();
     expect(() => loadHarlyConfig({ ...production, LARK_CLIENT_ID: "cli_test" })).toThrow();
     expect(loadHarlyConfig({ ...production, ...lark, HARLY_STAFF_AUTH_MODE: "lark-only" }).HARLY_STAFF_AUTH_MODE).toBe("lark-only");
     expect(() => loadHarlyConfig({ ...production, ...lark, HARLY_STAFF_AUTH_MODE: "unknown" })).toThrow();
+  });
+  it("opts in to Lark Admin enrollment without disabling the existing password mode", () => {
+    const enabled = { ...production, ...lark, HARLY_LARK_AUTO_PROVISION: "admin" };
+    expect(loadHarlyConfig(enabled)).toMatchObject({
+      HARLY_LARK_AUTO_PROVISION: "admin",
+      HARLY_STAFF_AUTH_MODE: "default",
+    });
+    expect(() => loadHarlyConfig({ ...production, HARLY_LARK_AUTO_PROVISION: "admin" })).toThrow();
+    expect(() => loadHarlyConfig({ ...enabled, DEMO_MODE: "true" })).toThrow(/HARLY_LARK_AUTO_PROVISION/);
+    expect(() => loadHarlyConfig({ ...enabled, HARLY_LARK_AUTO_PROVISION: "owner" })).toThrow();
   });
 });
