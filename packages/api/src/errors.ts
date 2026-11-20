@@ -30,13 +30,25 @@ export class ApiError extends Error {
   readonly code: ApiErrorCode;
   readonly status: number;
   readonly details?: unknown;
+  /**
+   * Optional machine-readable reason, rendered as `error.code` instead of the
+   * generic code (e.g. `candidate_email_exists` for a 409). The HTTP status is
+   * still derived from `code`.
+   */
+  readonly reason?: string;
 
-  constructor(code: ApiErrorCode, message: string, details?: unknown) {
+  constructor(
+    code: ApiErrorCode,
+    message: string,
+    details?: unknown,
+    reason?: string,
+  ) {
     super(message);
     this.name = "ApiError";
     this.code = code;
     this.status = STATUS_BY_CODE[code];
     this.details = details;
+    this.reason = reason;
   }
 
   static badRequest(message = "Invalid request.", details?: unknown) {
@@ -53,6 +65,9 @@ export class ApiError extends Error {
   }
   static conflict(message = "Resource already exists.") {
     return new ApiError("conflict", message);
+  }
+  static conflictWithReason(reason: string, message: string, details?: unknown) {
+    return new ApiError("conflict", message, details, reason);
   }
   static unprocessable(message = "Validation failed.", details?: unknown) {
     return new ApiError("unprocessable", message, details);

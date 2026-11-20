@@ -119,6 +119,15 @@ export const getCandidateContract = defineContract({
   },
 });
 
+/**
+ * PATCH body: the update fields plus the optional `expectedEmail` guard.
+ * Strict, so a field the API would not persist is rejected (422) rather than
+ * silently dropped.
+ */
+export const candidateUpdateRequestSchema = candidateUpdateSchema
+  .extend({ expectedEmail: z.string().trim().toLowerCase().max(320).optional() })
+  .strict();
+
 export const updateCandidateContract = defineContract({
   method: "PATCH",
   path: "/api/v1/candidates/{id}",
@@ -126,13 +135,20 @@ export const updateCandidateContract = defineContract({
   summary: "Update candidate",
   tags: ["Candidates"],
   auth: { scopes: ["candidates:write"] },
+  description:
+    "Fields that are omitted stay unchanged; an explicit `null` clears a nullable field. " +
+    "`email` is written. Send `expectedEmail` (or an `If-Match: <email>` header) to write only if the stored email still matches; otherwise 409 `email_precondition_failed`. " +
+    "An email used by another active candidate returns 409 `candidate_email_exists`. " +
+    "A request that changes nothing returns 200 without writing or emitting events.",
+  idempotent: true,
   parameters: { path: candidateIdPath },
-  requestBody: candidateUpdateSchema,
+  requestBody: candidateUpdateRequestSchema,
   responses: {
     200: successEnvelopeSchema(candidateSchema),
     401: errorEnvelopeSchema,
     403: errorEnvelopeSchema,
     404: errorEnvelopeSchema,
+    409: errorEnvelopeSchema,
     422: errorEnvelopeSchema,
   },
 });

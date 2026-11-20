@@ -17,7 +17,7 @@ export type SuccessEnvelope<T> = {
 
 export type ErrorEnvelope = {
   error: {
-    code: ApiErrorCode;
+    code: ApiErrorCode | (string & {});
     message: string;
     details?: unknown;
   };
@@ -31,7 +31,7 @@ export function success<T>(
 }
 
 export function failure(
-  code: ApiErrorCode,
+  code: ApiErrorCode | (string & {}),
   message: string,
   details?: unknown,
 ): ErrorEnvelope {

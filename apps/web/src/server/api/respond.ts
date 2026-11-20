@@ -30,7 +30,7 @@ export const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, X-Api-Key, Idempotency-Key",
+    "Content-Type, Authorization, X-Api-Key, Idempotency-Key, If-Match",
   "Access-Control-Expose-Headers":
     "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After, Harly-API-Version, Deprecation, Sunset, Idempotent-Replayed",
   "Access-Control-Max-Age": "86400",
@@ -95,11 +95,13 @@ export function apiOk<T>(
 export function apiError(
   code: ApiErrorCode,
   message: string,
-  options?: RespondOptions & { details?: unknown },
+  options?: RespondOptions & { details?: unknown; reason?: string },
 ): NextResponse {
   const status = options?.status ?? new ApiError(code, message).status;
   return withHeaders(
-    NextResponse.json(failure(code, message, options?.details), { status }),
+    NextResponse.json(failure(options?.reason ?? code, message, options?.details), {
+      status,
+    }),
     options?.cors,
   );
 }
@@ -149,6 +151,7 @@ export function withApi(
           attachTrace(apiError(error.code, error.message, {
             cors: options?.cors,
             details: error.details,
+            reason: error.reason,
           })),
           rateLimit,
         );
