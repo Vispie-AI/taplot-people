@@ -27,7 +27,7 @@ export const GET = withApi(
       limit,
     });
     const { items, meta } = paginate(rows, limit, (candidate) => ({
-      createdAt: candidate.createdAt.toISOString(),
+      createdAt: candidate.createdAtCursor,
       id: candidate.id,
     }));
     return apiOk(items.map(serializeCandidate), { pagination: meta });
