@@ -362,3 +362,40 @@ export function buildCandidateDirectoryPredicates(
 
   return predicates;
 }
+
+/**
+ * Application-level predicates for per-job breakdown aggregation so `byJob`
+ * counts only applications matching the active job/department/stage/status/
+ * source/date filters rather than unrelated historical applications.
+ */
+export function buildMatchingApplicationPredicates(
+  actor: WorkspaceSearchActor,
+  input: CandidateDirectoryFilters,
+): { predicates: SQL[]; needsStageJoin: boolean } {
+  const workspaceId = actor.workspaceId;
+  const applicationScope = scopedApplicationJobPredicate(actor);
+  const departments = mergeStrings(input.department, input.departments);
+  const roles = mergeStrings(input.role, input.roles);
+  const jobIds = Array.from(new Set((input.jobIds ?? []).filter(Boolean)));
+  const { appliedAfter, appliedBefore } = resolveAppliedDateRange({
+    appliedAfter: input.appliedAfter,
+    appliedBefore: input.appliedBefore,
+    days: input.days,
+  });
+
+  const predicates: SQL[] = [
+    eq(applications.workspaceId, workspaceId),
+    eq(applications.candidateId, candidates.id),
+  ];
+  if (applicationScope) predicates.push(applicationScope);
+  if (jobIds.length > 0) predicates.push(inArray(applications.jobId, jobIds));
+  if (departments.length > 0) predicates.push(inArray(jobs.department, departments));
+  if (roles.length > 0) predicates.push(inArray(jobs.title, roles));
+  if (input.stage) predicates.push(eq(jobStages.name, input.stage));
+  if (input.status) predicates.push(eq(applications.status, input.status));
+  if (input.source) predicates.push(eq(applications.source, input.source));
+  if (appliedAfter) predicates.push(gte(applications.appliedAt, appliedAfter));
+  if (appliedBefore) predicates.push(lte(applications.appliedAt, appliedBefore));
+
+  return { predicates, needsStageJoin: Boolean(input.stage) };
+}

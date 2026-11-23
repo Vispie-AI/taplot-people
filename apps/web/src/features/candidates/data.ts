@@ -8,7 +8,6 @@ import {
   eq,
   exists,
   inArray,
-  ilike,
   isNotNull,
   isNull,
   or,
@@ -98,6 +97,7 @@ import { resumeKeyFromUrl } from "@/lib/resume/storage-key";
 import { isMailUnificationEnabled } from "@/lib/mail/feature-flag";
 import {
   buildCandidateDirectoryPredicates,
+  buildMatchingApplicationPredicates,
   resolveDirectoryListFilters,
   type CandidateApplicationStatus,
   type CandidateDirectoryFilters,
@@ -850,7 +850,6 @@ export async function summarizeCandidateDirectory(
 ): Promise<CandidateDirectorySummary> {
   const actor = await requireCandidateReadActor();
   const workspace = { id: actor.workspaceId };
-  const applicationScope = scopedApplicationJobPredicate(actor);
   const { filters: resolved } = await resolveDirectoryListFilters(workspace.id, input);
   const basePredicates = buildCandidateDirectoryPredicates(actor, resolved);
   const where = and(...basePredicates);
@@ -868,37 +867,46 @@ export async function summarizeCandidateDirectory(
         ),
     ),
   );
+  const { predicates: appPredicates, needsStageJoin } = buildMatchingApplicationPredicates(
+    actor,
+    resolved,
+  );
+
+  const byJobBase = db
+    .select({
+      jobId: jobs.id,
+      jobTitle: jobs.title,
+      department: jobs.department,
+      count: sql<number>`count(distinct ${candidates.id})::int`.as("candidate_count"),
+    })
+    .from(candidates)
+    .innerJoin(applications, and(eq(applications.workspaceId, workspace.id), eq(applications.candidateId, candidates.id)))
+    .innerJoin(
+      jobs,
+      and(
+        eq(jobs.id, applications.jobId),
+        eq(jobs.workspaceId, workspace.id),
+        isNull(jobs.deletedAt),
+      ),
+    );
+
+  const byJobQuery = needsStageJoin
+    ? byJobBase.leftJoin(
+        jobStages,
+        and(
+          eq(jobStages.id, applications.currentStageId),
+          eq(jobStages.workspaceId, workspace.id),
+        ),
+      )
+    : byJobBase;
 
   const [totalRow, resumeRow, byJobRows] = await Promise.all([
     db.select({ total: count() }).from(candidates).where(where),
     resolved.hasResume
       ? Promise.resolve(null)
       : db.select({ total: count() }).from(candidates).where(withResumeWhere),
-    db
-      .select({
-        jobId: jobs.id,
-        jobTitle: jobs.title,
-        department: jobs.department,
-        count: sql<number>`count(distinct ${candidates.id})::int`.as("candidate_count"),
-      })
-      .from(candidates)
-      .innerJoin(
-        applications,
-        and(
-          eq(applications.workspaceId, workspace.id),
-          eq(applications.candidateId, candidates.id),
-          applicationScope,
-        ),
-      )
-      .innerJoin(
-        jobs,
-        and(
-          eq(jobs.id, applications.jobId),
-          eq(jobs.workspaceId, workspace.id),
-          isNull(jobs.deletedAt),
-        ),
-      )
-      .where(where)
+    byJobQuery
+      .where(and(where, ...appPredicates))
       .groupBy(jobs.id, jobs.title, jobs.department)
       .orderBy(desc(sql`count(distinct ${candidates.id})`), asc(jobs.title))
       .limit(50),

@@ -262,7 +262,7 @@ export async function importBossResume(
     } else if (input.candidate.position?.trim()) {
       const pos = input.candidate.position.trim().toLowerCase();
       const matchedJobs = await tx
-        .select({ id: jobs.id })
+        .select({ id: jobs.id, status: jobs.status })
         .from(jobs)
         .where(
           and(
@@ -274,9 +274,14 @@ export async function importBossResume(
             ),
           ),
         )
-        .limit(2);
+        .limit(10);
       if (matchedJobs.length === 1) {
         targetJobId = matchedJobs[0]!.id;
+      } else if (matchedJobs.length > 1) {
+        const openMatches = matchedJobs.filter((j) => j.status === "open");
+        if (openMatches.length === 1) {
+          targetJobId = openMatches[0]!.id;
+        }
       }
     }
 
