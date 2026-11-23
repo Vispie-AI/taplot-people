@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCandidatesDirectoryUrl,
   candidateHref,
   candidateNavigationParams,
   directoryOrigin,
@@ -10,6 +11,7 @@ import {
   originLabel,
   parseCandidateNavigation,
   pipelineOrigin,
+  resolveAppliedDateRange,
   REVIEW_ORIGIN,
 } from "./origin";
 
@@ -84,6 +86,48 @@ describe("candidate origin: directory", () => {
 
   it("never carries an application for directory rows", () => {
     expect(candidateNavigationParams(DIRECTORY_ORIGIN, APP).toString()).toBe("");
+  });
+
+  it("round-trips multi-job, date range, hasResume, and list params", () => {
+    const JOB2 = "55555555-5555-4555-8555-555555555555";
+    const LIST = "66666666-6666-4666-8666-666666666666";
+    const url = buildCandidatesDirectoryUrl("https://taplot-people.example", {
+      jobId: [JOB, JOB2],
+      appliedAfter: "2026-10-25",
+      appliedBefore: "2026-11-23",
+      hasResume: "1",
+      list: LIST,
+    });
+    expect(url).toBe(
+      `https://taplot-people.example/dashboard/candidates?jobId=${JOB}&jobId=${JOB2}&appliedAfter=2026-10-25&appliedBefore=2026-11-23&hasResume=1&list=${LIST}`,
+    );
+    const parsed = directoryOrigin(new URL(url).searchParams);
+    expect(parsed).toEqual({
+      kind: "candidates",
+      filters: {
+        jobId: [JOB, JOB2],
+        appliedAfter: "2026-10-25",
+        appliedBefore: "2026-11-23",
+        hasResume: "1",
+        list: LIST,
+      },
+    });
+    const detailHref = candidateHref(CANDIDATE, parsed);
+    expect(parseHref(detailHref).nav.origin).toEqual(parsed);
+  });
+
+  it("resolves date bounds and rolling day windows cleanly", () => {
+    const fixedNow = new Date("2026-11-23T12:00:00.000Z");
+    const explicit = resolveAppliedDateRange(
+      { appliedAfter: "2026-10-25", appliedBefore: "2026-11-23", days: 7 },
+      fixedNow,
+    );
+    expect(explicit.appliedAfter?.toISOString()).toBe("2026-10-25T00:00:00.000Z");
+    expect(explicit.appliedBefore?.toISOString()).toBe("2026-11-23T23:59:59.999Z");
+
+    const rolling = resolveAppliedDateRange({ days: 30 }, fixedNow);
+    expect(rolling.appliedAfter?.toISOString()).toBe("2026-10-24T12:00:00.000Z");
+    expect(rolling.appliedBefore).toBeUndefined();
   });
 });
 

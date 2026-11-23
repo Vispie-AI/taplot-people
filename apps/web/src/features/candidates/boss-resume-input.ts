@@ -14,6 +14,9 @@ export const bossResumeMetadataSchema = z
       .string()
       .regex(/^[a-fA-F0-9]{64}$/)
       .transform((s) => s.toLowerCase()),
+    jobId: z.uuid().optional(),
+    appliedAt: z.iso.datetime({ offset: true }).optional(),
+    source: z.string().trim().min(1).max(50).optional(),
     candidate: z
       .object({
         name: z.string().trim().min(1).max(255),

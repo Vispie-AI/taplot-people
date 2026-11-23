@@ -30,6 +30,7 @@ vi.mock("@/features/candidates/data", () => ({
   listCandidateDirectoryFacets: mocks.listCandidateDirectoryFacets,
   listTrashedCandidates: mocks.listTrashedCandidates,
 }));
+vi.mock("@/features/candidates/lists", () => ({ getCandidateList: vi.fn(async () => null) }));
 vi.mock("@/features/email-templates/data", () => ({ listEmailTemplates: mocks.listEmailTemplates }));
 vi.mock("@/features/jobs/data", () => ({ listJobOptions: mocks.listJobOptions }));
 vi.mock("@/features/jobs/hiring-team-data", () => ({ listWorkspaceMembers: mocks.listWorkspaceMembers }));
@@ -75,5 +76,29 @@ describe("candidates directory page: trash for job-limited roles", () => {
     await CandidatesPage({ searchParams: Promise.resolve({}) });
 
     expect(mocks.listTrashedCandidates).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards multi-job, date range, and hasResume URL params to listCandidateDirectory", async () => {
+    mocks.getRolePolicy.mockResolvedValue({ permissions: ["candidates:view"], scope: UNRESTRICTED });
+    const jobA = "11111111-1111-4111-8111-111111111111";
+    const jobB = "22222222-2222-4222-8222-222222222222";
+
+    await CandidatesPage({
+      searchParams: Promise.resolve({
+        jobId: [jobA, jobB],
+        appliedAfter: "2026-10-25",
+        appliedBefore: "2026-11-23",
+        hasResume: "1",
+      }),
+    });
+
+    expect(mocks.listCandidateDirectory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobIds: [jobA, jobB],
+        appliedAfter: "2026-10-25",
+        appliedBefore: "2026-11-23",
+        hasResume: true,
+      }),
+    );
   });
 });

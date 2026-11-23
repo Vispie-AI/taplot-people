@@ -27,6 +27,7 @@ export const importBossResumeContract = defineContract({
         sha256: z.string(),
         candidateId: z.string().uuid(),
         fileId: z.string().uuid(),
+        applicationId: z.string().uuid().nullable().optional(),
         deduplicated: z.boolean(),
       }),
     ),

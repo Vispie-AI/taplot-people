@@ -20,9 +20,10 @@ import {
   listCandidateDirectory,
   listCandidateDirectoryFacets,
   listTrashedCandidates,
-  type CandidateApplicationStatus,
   type CandidateDirectoryFilters,
 } from "@/features/candidates/data";
+import { originFiltersToDirectoryFilters } from "@/features/candidates/directory-query";
+import { getCandidateList } from "@/features/candidates/lists";
 import { DirectoryTabs, PageTitleRow } from "@/features/candidates/directory-chrome";
 import { TrashCandidateActions } from "@/features/candidates/TrashCandidateActions";
 import { AddCandidateDrawer } from "@/features/candidates/AddCandidateDrawer";
@@ -33,7 +34,13 @@ import { isUnrestrictedScope } from "@/features/search/scope";
 import { resolveSearchActor } from "@/features/search/workspace-search";
 import { getReviewQueue } from "@/features/review/queue";
 import { ReviewQueueList } from "@/features/review/ReviewQueueList";
-import { candidateHref, REVIEW_ORIGIN } from "@/features/candidates/origin";
+import {
+  candidateHref,
+  directoryOrigin,
+  filterValues,
+  REVIEW_ORIGIN,
+  singleFilterValue,
+} from "@/features/candidates/origin";
 import { getWorkspaceContext } from "@/features/workspaces/context";
 import { can, getRolePolicy, requirePagePermission } from "@/features/workspaces/permissions-server";
 import { candidateAvatarFallbackSrcs } from "@/lib/candidate-avatar";
@@ -52,12 +59,18 @@ type CandidatesPageProps = {
     view?: string;
     import?: string;
     q?: string;
-    dept?: string;
-    role?: string;
+    dept?: string | string[];
+    role?: string | string[];
+    jobId?: string | string[];
     stage?: string;
     status?: string;
     source?: string;
     tag?: string;
+    appliedAfter?: string;
+    appliedBefore?: string;
+    days?: string;
+    hasResume?: string;
+    list?: string;
     sort?: string;
     page?: string;
     /** `review`: the current user's review queue instead of the directory. */
@@ -71,10 +84,11 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
   const t = await getTranslations("candidates.directory");
   const locale = await getLocale();
   await requirePagePermission("candidates:view");
-  const { view, import: importSource, q, dept, role, stage, status, source, tag, sort, page: pageRaw, queue, done } = await searchParams;
+  const rawParams = await searchParams;
+  const { view, import: importSource, page: pageRaw, queue, done } = rawParams;
   const isQueue = queue === "review";
   const isTrash = !isQueue && view === "trash";
-const initialImportSource: ImportSource | undefined =
+  const initialImportSource: ImportSource | undefined =
     importSource === "csv" ||
     importSource === "greenhouse" ||
     importSource === "workable" ||
@@ -84,35 +98,22 @@ const initialImportSource: ImportSource | undefined =
       ? importSource
       : undefined;
 
-  const candidateStatus =
-    status === "active" ||
-    status === "hired" ||
-    status === "rejected" ||
-    status === "withdrawn"
-      ? status
-      : undefined;
-  const candidateSort: CandidateDirectoryFilters["sort"] =
-    sort === "oldest" || sort === "modified" || sort === "name"
-      ? sort
-      : "recent";
+  const parsedOrigin = directoryOrigin(rawParams);
+  const urlFilters = parsedOrigin.kind === "candidates" ? parsedOrigin.filters : {};
+  const mappedFilters = originFiltersToDirectoryFilters(urlFilters);
 
-  const directoryFilters = {
-    query: q,
-    department: dept,
-    role,
-    stage,
-    status: candidateStatus as CandidateApplicationStatus | undefined,
-    source,
-    tag,
-    sort: candidateSort,
+  const directoryFilters: CandidateDirectoryFilters = {
+    ...mappedFilters,
     page: Number.isFinite(Number(pageRaw)) ? Number(pageRaw) : 1,
     pageSize: 50,
   };
+  const hasActiveUrlFilters = Object.keys(urlFilters).length > 0;
   const workspaceContext = await getWorkspaceContext();
   const policy = await getRolePolicy(workspaceContext.organization.id, workspaceContext.roleKey);
   const [
     directory,
     facets,
+    activeList,
     reviewQueue,
     trashed,
     emailTemplates,
@@ -129,6 +130,9 @@ const initialImportSource: ImportSource | undefined =
     isQueue
       ? Promise.resolve({ departments: [], roles: [], stages: [], sources: [], tags: [] })
       : listCandidateDirectoryFacets(),
+    !isQueue && !isTrash && mappedFilters.listId
+      ? getCandidateList(workspaceContext.organization.id, mappedFilters.listId)
+      : Promise.resolve(null),
     // The same source Home counts, so "Review queue · N" matches it.
     resolveSearchActor().then((actor) => getReviewQueue(actor)),
     // The trash is not filtered by job scope, so a role limited to specific jobs
@@ -154,10 +158,12 @@ const initialImportSource: ImportSource | undefined =
       avatarUrl: candidate.avatarUrl,
       avatarFallbackSrcs: candidateAvatarFallbackSrcs(candidate.email, candidate.githubUrl, { gravatarEnabled }),
       inPool: candidate.inPool,
+      hasResume: Boolean(candidate.hasResume),
       hasOpenPrivacyRequest: candidate.hasOpenPrivacyRequest,
       isReferred: candidate.isReferred,
       isFeaturedReferral: candidate.isFeaturedReferral,
       location: candidate.location,
+      headline: candidate.headline ?? null,
       role: candidate.latestApplication?.jobTitle ?? null,
       department: candidate.latestApplication?.department ?? null,
       stage: candidate.latestApplication?.currentStageName ?? null,
@@ -176,6 +182,10 @@ const initialImportSource: ImportSource | undefined =
   const firstQueueItem = reviewQueue.items[0] ?? null;
 
   const importJobsProp = jobOptions.map((job) => ({ id: job.id, title: job.title }));
+  const jobNamesById = Object.fromEntries(jobOptions.map((job) => [job.id, job.title]));
+  const selectedDepts = filterValues(urlFilters.dept);
+  const selectedRoles = filterValues(urlFilters.role);
+  const selectedJobIds = filterValues(urlFilters.jobId);
 
   return (
     <div className="space-y-6">
@@ -303,7 +313,7 @@ const initialImportSource: ImportSource | undefined =
             description={t("trashEmptyDescription")}
           />
         )
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && !hasActiveUrlFilters ? (
         <EmptyState
           icon={Users}
           title={t("emptyTitle")}
@@ -323,15 +333,51 @@ const initialImportSource: ImportSource | undefined =
           }
         />
       ) : (
-        <CandidatesTable
-          key={JSON.stringify(directoryFilters)}
-          rows={rows}
-          pageInfo={{ page: directory.page, pageSize: directory.pageSize, total: directory.total, hasNextPage: directory.hasNextPage }}
-          filterOptions={facets}
-          initialFilters={{ query: q ?? "", dept: dept ?? "__all__", role: role ?? "__all__", stage: stage ?? "__all__", status: candidateStatus ?? "__all__", source: source ?? "__all__", tag: tag ?? "__all__", sort: candidateSort }}
-          emailTemplates={emailTemplates}
-          access={{ canReject, canDelete, canExport }}
-        />
+        <div className="space-y-4">
+          {activeList ? (
+            <div
+              role="status"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-inner)] border border-hairline bg-card-inset px-4 py-3 text-[13.5px] text-near-ink"
+            >
+              <div className="min-w-0">
+                <p className="font-medium text-near-ink">{activeList.title}</p>
+                {activeList.description ? (
+                  <p className="mt-0.5 text-[12.5px] text-soft-ink">{activeList.description}</p>
+                ) : null}
+              </div>
+              <Button asChild variant="outline" size="sm" className="rounded-full">
+                <Link href="/dashboard/candidates">{t("allCandidates")}</Link>
+              </Button>
+            </div>
+          ) : null}
+          <CandidatesTable
+            key={JSON.stringify(directoryFilters)}
+            rows={rows}
+            pageInfo={{ page: directory.page, pageSize: directory.pageSize, total: directory.total, hasNextPage: directory.hasNextPage }}
+            filterOptions={facets}
+            jobNamesById={jobNamesById}
+            initialFilters={{
+              query: singleFilterValue(urlFilters.q) ?? "",
+              dept: selectedDepts.length === 1 ? selectedDepts[0]! : "__all__",
+              depts: selectedDepts,
+              role: selectedRoles.length === 1 ? selectedRoles[0]! : "__all__",
+              roles: selectedRoles,
+              jobIds: selectedJobIds,
+              stage: singleFilterValue(urlFilters.stage) ?? "__all__",
+              status: mappedFilters.status ?? "__all__",
+              source: singleFilterValue(urlFilters.source) ?? "__all__",
+              tag: singleFilterValue(urlFilters.tag) ?? "__all__",
+              appliedAfter: singleFilterValue(urlFilters.appliedAfter) ?? "",
+              appliedBefore: singleFilterValue(urlFilters.appliedBefore) ?? "",
+              days: singleFilterValue(urlFilters.days) ?? "__all__",
+              hasResume: mappedFilters.hasResume ?? false,
+              list: mappedFilters.listId ?? "",
+              sort: mappedFilters.sort ?? "recent",
+            }}
+            emailTemplates={emailTemplates}
+            access={{ canReject, canDelete, canExport }}
+          />
+        </div>
       )}
     </div>
   );

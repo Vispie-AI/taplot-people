@@ -3,7 +3,15 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 import { ApiError } from "@harly/api";
-import { bossResumeImports, candidateFiles, candidates, db } from "@harly/db";
+import {
+  applications,
+  bossResumeImports,
+  candidateFiles,
+  candidates,
+  db,
+  jobs,
+  jobStages,
+} from "@harly/db";
 
 import { storage } from "@/lib/storage";
 import {
@@ -232,9 +240,94 @@ export async function importBossResume(
           updatedAt: new Date(),
         },
       });
+    // Optionally link an application to a matching job so BOSS resumes are
+    // discoverable by department, role, jobId, and applied date filters.
+    let targetJobId: string | null = null;
+    if (input.jobId) {
+      const [explicitJob] = await tx
+        .select({ id: jobs.id })
+        .from(jobs)
+        .where(
+          and(
+            eq(jobs.workspaceId, workspaceId),
+            eq(jobs.id, input.jobId),
+            isNull(jobs.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!explicitJob) {
+        throw ApiError.notFound("Target job not found in this workspace.");
+      }
+      targetJobId = explicitJob.id;
+    } else if (input.candidate.position?.trim()) {
+      const pos = input.candidate.position.trim().toLowerCase();
+      const matchedJobs = await tx
+        .select({ id: jobs.id })
+        .from(jobs)
+        .where(
+          and(
+            eq(jobs.workspaceId, workspaceId),
+            isNull(jobs.deletedAt),
+            or(
+              sql`lower(${jobs.title}) = ${pos}`,
+              sql`lower(${jobs.slug}) = ${pos}`,
+            ),
+          ),
+        )
+        .limit(2);
+      if (matchedJobs.length === 1) {
+        targetJobId = matchedJobs[0]!.id;
+      }
+    }
+
+    let applicationId: string | null = null;
+    if (targetJobId) {
+      const [existingApp] = await tx
+        .select({ id: applications.id })
+        .from(applications)
+        .where(
+          and(
+            eq(applications.workspaceId, workspaceId),
+            eq(applications.candidateId, candidate.id),
+            eq(applications.jobId, targetJobId),
+          ),
+        )
+        .limit(1);
+      if (existingApp) {
+        applicationId = existingApp.id;
+      } else {
+        const [firstStage] = await tx
+          .select({ id: jobStages.id })
+          .from(jobStages)
+          .where(
+            and(
+              eq(jobStages.workspaceId, workspaceId),
+              eq(jobStages.jobId, targetJobId),
+              isNull(jobStages.archivedAt),
+            ),
+          )
+          .orderBy(asc(jobStages.order))
+          .limit(1);
+        const [createdApp] = await tx
+          .insert(applications)
+          .values({
+            workspaceId,
+            candidateId: candidate.id,
+            jobId: targetJobId,
+            currentStageId: firstStage?.id ?? null,
+            status: "active",
+            source: input.source ?? "boss",
+            appliedAt: input.appliedAt ? new Date(input.appliedAt) : new Date(),
+          })
+          .returning({ id: applications.id });
+        applicationId = createdApp?.id ?? null;
+      }
+    }
+
     return {
       candidateId: candidate.id,
       fileId: file.id,
+      applicationId,
       sha256: input.sha256,
       sourceRecordId: input.sourceRecordId,
       deduplicated: Boolean(existingFile),
@@ -245,6 +338,7 @@ export async function importBossResume(
   return {
     candidateId: result.candidateId,
     fileId: result.fileId,
+    applicationId: result.applicationId,
     sha256: result.sha256,
     sourceRecordId: result.sourceRecordId,
     deduplicated: result.deduplicated,

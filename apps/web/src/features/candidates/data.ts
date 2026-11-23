@@ -96,12 +96,14 @@ import { storage } from "@/lib/storage";
 import { isWorkspaceStorageKey } from "@/lib/storage-validation";
 import { resumeKeyFromUrl } from "@/lib/resume/storage-key";
 import { isMailUnificationEnabled } from "@/lib/mail/feature-flag";
+import {
+  buildCandidateDirectoryPredicates,
+  resolveDirectoryListFilters,
+  type CandidateApplicationStatus,
+  type CandidateDirectoryFilters,
+} from "@/features/candidates/directory-query";
 
-export type CandidateApplicationStatus =
-  | "active"
-  | "hired"
-  | "rejected"
-  | "withdrawn";
+export type { CandidateApplicationStatus, CandidateDirectoryFilters };
 
 export type CandidateListItem = {
   id: string;
@@ -110,11 +112,13 @@ export type CandidateListItem = {
   fullName: string;
   email: string;
   phone: string | null;
+  headline?: string | null;
   location: string | null;
   avatarUrl: string | null;
   githubUrl: string | null;
   applicationCount: number;
   inPool: boolean;
+  hasResume?: boolean;
   hasOpenPrivacyRequest: boolean;
   isReferred: boolean;
   isFeaturedReferral: boolean;
@@ -131,25 +135,23 @@ export type CandidateListItem = {
   } | null;
 };
 
-export type CandidateDirectoryFilters = {
-  query?: string;
-  department?: string;
-  role?: string;
-  stage?: string;
-  status?: CandidateApplicationStatus;
-  source?: string;
-  tag?: string;
-  sort?: "recent" | "oldest" | "modified" | "name";
-  page?: number;
-  pageSize?: number;
-};
-
 export type CandidateDirectoryPage = {
-  rows: (CandidateListItem & { tags: string[] })[];
+  rows: (CandidateListItem & { tags: string[]; hasResume: boolean })[];
   total: number;
   page: number;
   pageSize: number;
   hasNextPage: boolean;
+};
+
+export type CandidateDirectorySummary = {
+  total: number;
+  withResumeCount: number;
+  byJob: Array<{
+    jobId: string;
+    jobTitle: string;
+    department: string | null;
+    count: number;
+  }>;
 };
 
 export type CandidateDirectoryFacets = {
@@ -405,6 +407,7 @@ export async function listCandidates() {
       lastName: candidates.lastName,
       email: candidates.email,
       phone: candidates.phone,
+      headline: candidates.headline,
       location: sql<
         string | null
       >`coalesce(${candidates.address}, ${candidates.location})`,
@@ -466,6 +469,7 @@ export async function listCandidates() {
       fullName: `${row.firstName} ${row.lastName}`,
       email: row.email,
       phone: row.phone,
+      headline: row.headline,
       location: row.location,
       avatarUrl: row.avatarUrl,
       githubUrl: row.githubUrl,
@@ -619,11 +623,9 @@ export async function listCandidateDirectory(
   const actor = await requireCandidateReadActor();
   const workspace = { id: actor.workspaceId };
   const applicationScope = scopedApplicationJobPredicate(actor);
-  const pageSize = Math.min(Math.max(input.pageSize ?? 50, 10), 100);
-  const page = Math.max(Math.floor(input.page ?? 1), 1);
-  const query = input.query?.trim().replace(/\s+/g, " ").slice(0, 100) ?? "";
-  const escapedQuery = query.replace(/[\\%_]/g, "\\$&");
-  const like = `%${escapedQuery}%`;
+  const { filters: resolved } = await resolveDirectoryListFilters(workspace.id, input);
+  const pageSize = Math.min(Math.max(resolved.pageSize ?? 50, 10), 100);
+  const page = Math.max(Math.floor(resolved.page ?? 1), 1);
 
   const latestApplication = db
     .selectDistinctOn([applications.candidateId], {
@@ -654,78 +656,13 @@ export async function listCandidateDirectory(
     .groupBy(applications.candidateId)
     .as("application_counts");
 
-  const predicates = [
-    eq(candidates.workspaceId, workspace.id),
-    isNull(candidates.deletedAt),
-  ];
-  // A restricted actor only sees candidates with an application in scope.
-  const visibleCandidate = candidateScopeSql(actor, candidates.id);
-  if (visibleCandidate) predicates.push(visibleCandidate);
-
-  if (query) {
-    predicates.push(
-      or(
-        ilike(candidates.firstName, like),
-        ilike(candidates.lastName, like),
-        ilike(candidates.email, like),
-        ilike(candidates.phone, like),
-        ilike(candidates.headline, like),
-        ilike(candidates.location, like),
-        ilike(jobs.title, like),
-        ilike(jobs.department, like),
-      )!,
-    );
-  }
-  if (input.department) predicates.push(eq(jobs.department, input.department));
-  if (input.role) predicates.push(eq(jobs.title, input.role));
-  if (input.stage) predicates.push(eq(jobStages.name, input.stage));
-  if (input.status) predicates.push(eq(latestApplication.status, input.status));
-  if (input.source) predicates.push(eq(latestApplication.source, input.source));
-  if (input.tag) {
-    predicates.push(
-      exists(
-        db
-          .select({ id: candidateTags.id })
-          .from(candidateTags)
-          .where(
-            and(
-              eq(candidateTags.workspaceId, workspace.id),
-              eq(candidateTags.candidateId, candidates.id),
-              eq(candidateTags.label, input.tag),
-            ),
-          ),
-      ),
-    );
-  }
+  const predicates = buildCandidateDirectoryPredicates(actor, resolved);
   const where = and(...predicates);
 
   const [totalRow, rows] = await Promise.all([
     db
       .select({ total: count() })
       .from(candidates)
-      .leftJoin(
-        latestApplication,
-        eq(latestApplication.candidateId, candidates.id),
-      )
-      .leftJoin(
-        jobs,
-        and(
-          eq(jobs.id, latestApplication.jobId),
-          eq(jobs.workspaceId, workspace.id),
-          isNull(jobs.deletedAt),
-        ),
-      )
-      .leftJoin(
-        jobStages,
-        and(
-          eq(jobStages.id, latestApplication.currentStageId),
-          eq(jobStages.workspaceId, workspace.id),
-        ),
-      )
-      .leftJoin(
-        applicationCounts,
-        eq(applicationCounts.candidateId, candidates.id),
-      )
       .where(where),
     db
       .select({
@@ -734,6 +671,7 @@ export async function listCandidateDirectory(
           lastName: candidates.lastName,
           email: candidates.email,
           phone: candidates.phone,
+          headline: candidates.headline,
           location: sql<string | null>`coalesce(${candidates.address}, ${candidates.location})`,
           avatarUrl: candidates.avatarUrl,
           githubUrl: candidates.githubUrl,
@@ -774,11 +712,11 @@ export async function listCandidateDirectory(
       )
       .where(where)
       .orderBy(
-        ...(input.sort === "name"
+        ...(resolved.sort === "name"
           ? [asc(candidates.lastName), asc(candidates.firstName), asc(candidates.id)]
-          : input.sort === "oldest"
+          : resolved.sort === "oldest"
             ? [asc(latestApplication.appliedAt), asc(candidates.id)]
-            : input.sort === "modified"
+            : resolved.sort === "modified"
               ? [desc(candidates.updatedAt), desc(candidates.id)]
               : [
                   desc(sql`greatest(${candidates.updatedAt}, coalesce(${latestApplication.appliedAt}, ${candidates.updatedAt}))`),
@@ -790,7 +728,7 @@ export async function listCandidateDirectory(
   ]);
 
   const candidateIds = rows.map((row) => row.id);
-  const [tagRows, poolRows, privacyRows, referralRows] = candidateIds.length
+  const [tagRows, poolRows, privacyRows, referralRows, resumeRows] = candidateIds.length
     ? await Promise.all([
         db
           .select({ candidateId: candidateTags.candidateId, label: candidateTags.label })
@@ -832,8 +770,17 @@ export async function listCandidateDirectory(
             ),
           )
           .groupBy(candidateReferrals.candidateId),
+        db
+          .selectDistinct({ candidateId: candidateFiles.candidateId })
+          .from(candidateFiles)
+          .where(
+            and(
+              eq(candidateFiles.workspaceId, workspace.id),
+              inArray(candidateFiles.candidateId, candidateIds),
+            ),
+          ),
       ])
-    : [[], [], [], []];
+    : [[], [], [], [], []];
 
   const tagsByCandidate = new Map<string, string[]>();
   for (const row of tagRows) {
@@ -851,6 +798,7 @@ export async function listCandidateDirectory(
   const featuredReferralIds = new Set(
     referralRows.filter((row) => row.featured).map((row) => row.candidateId),
   );
+  const resumeIds = new Set(resumeRows.map((row) => row.candidateId));
 
   return {
     rows: rows.map((row) => ({
@@ -860,11 +808,13 @@ export async function listCandidateDirectory(
       fullName: `${row.firstName} ${row.lastName}`,
       email: row.email,
       phone: row.phone,
+      headline: row.headline,
       location: row.location,
       avatarUrl: row.avatarUrl,
       githubUrl: row.githubUrl,
       applicationCount: row.applicationCount,
       inPool: poolIds.has(row.id),
+      hasResume: resumeIds.has(row.id),
       hasOpenPrivacyRequest: privacyIds.has(row.id),
       isReferred: referredIds.has(row.id),
       isFeaturedReferral: featuredReferralIds.has(row.id),
@@ -888,6 +838,86 @@ export async function listCandidateDirectory(
     page,
     pageSize,
     hasNextPage: page * pageSize < Number(totalRow[0]?.total ?? 0),
+  };
+}
+
+/**
+ * Aggregate counts (unique candidates, resume coverage, and per-job breakdown)
+ * for any directory filter set in one bounded pass.
+ */
+export async function summarizeCandidateDirectory(
+  input: CandidateDirectoryFilters = {},
+): Promise<CandidateDirectorySummary> {
+  const actor = await requireCandidateReadActor();
+  const workspace = { id: actor.workspaceId };
+  const applicationScope = scopedApplicationJobPredicate(actor);
+  const { filters: resolved } = await resolveDirectoryListFilters(workspace.id, input);
+  const basePredicates = buildCandidateDirectoryPredicates(actor, resolved);
+  const where = and(...basePredicates);
+  const withResumeWhere = and(
+    ...basePredicates,
+    exists(
+      db
+        .select({ id: candidateFiles.id })
+        .from(candidateFiles)
+        .where(
+          and(
+            eq(candidateFiles.workspaceId, workspace.id),
+            eq(candidateFiles.candidateId, candidates.id),
+          ),
+        ),
+    ),
+  );
+
+  const [totalRow, resumeRow, byJobRows] = await Promise.all([
+    db.select({ total: count() }).from(candidates).where(where),
+    resolved.hasResume
+      ? Promise.resolve(null)
+      : db.select({ total: count() }).from(candidates).where(withResumeWhere),
+    db
+      .select({
+        jobId: jobs.id,
+        jobTitle: jobs.title,
+        department: jobs.department,
+        count: sql<number>`count(distinct ${candidates.id})::int`.as("candidate_count"),
+      })
+      .from(candidates)
+      .innerJoin(
+        applications,
+        and(
+          eq(applications.workspaceId, workspace.id),
+          eq(applications.candidateId, candidates.id),
+          applicationScope,
+        ),
+      )
+      .innerJoin(
+        jobs,
+        and(
+          eq(jobs.id, applications.jobId),
+          eq(jobs.workspaceId, workspace.id),
+          isNull(jobs.deletedAt),
+        ),
+      )
+      .where(where)
+      .groupBy(jobs.id, jobs.title, jobs.department)
+      .orderBy(desc(sql`count(distinct ${candidates.id})`), asc(jobs.title))
+      .limit(50),
+  ]);
+
+  const total = Number(totalRow[0]?.total ?? 0);
+  const withResumeCount = resolved.hasResume
+    ? total
+    : Number(resumeRow?.[0]?.total ?? 0);
+
+  return {
+    total,
+    withResumeCount,
+    byJob: byJobRows.map((row) => ({
+      jobId: row.jobId,
+      jobTitle: row.jobTitle,
+      department: row.department ?? null,
+      count: Number(row.count),
+    })),
   };
 }
 

@@ -1,4 +1,9 @@
 import { McpToolError } from "../../types";
+import {
+  buildCandidatesDirectoryUrl,
+  type DirectoryFilterKey,
+  type DirectoryFilterValue,
+} from "@/features/candidates/origin";
 
 // Pure helpers for the candidates and pipeline MCP tools: error mapping, text
 // hygiene, URL building and result shaping. No database or session access here,
@@ -105,6 +110,17 @@ export function candidateUrl(origin: string, candidateId: string, applicationId?
   return applicationId ? `${base}?application=${applicationId}` : base;
 }
 
+export function candidatesDirectoryUrl(
+  origin: string,
+  filters: Partial<Record<DirectoryFilterKey, DirectoryFilterValue | null | undefined>>,
+): string {
+  return buildCandidatesDirectoryUrl(origin, filters);
+}
+
+export function candidateListUrl(origin: string, listId: string): string {
+  return buildCandidatesDirectoryUrl(origin, { list: listId });
+}
+
 export function pipelineUrl(origin: string, jobId: string): string {
   return `${origin}/dashboard/pipeline?job=${jobId}`;
 }
@@ -150,6 +166,7 @@ type DirectoryRow = {
   avatarUrl: string | null;
   applicationCount: number;
   inPool: boolean;
+  hasResume?: boolean;
   hasOpenPrivacyRequest: boolean;
   isReferred: boolean;
   isFeaturedReferral: boolean;
@@ -178,6 +195,7 @@ export function serializeDirectoryRow(row: DirectoryRow, origin: string) {
     tags: row.tags,
     applicationCount: row.applicationCount,
     inTalentPool: row.inPool,
+    hasResume: Boolean(row.hasResume),
     isReferred: row.isReferred,
     isFeaturedReferral: row.isFeaturedReferral,
     hasOpenPrivacyRequest: row.hasOpenPrivacyRequest,
