@@ -62,6 +62,25 @@ describe("BOSS original request validation", () => {
     });
   });
 
+  it("accepts optional jobId, appliedAt, and source metadata", async () => {
+    const jobId = "6f1c1e0e-1111-4111-8111-111111111111";
+    const input = await parseBossResumeRequest(
+      request({
+        metadata: JSON.stringify({
+          sourceRecordId: "rec-with-job",
+          sha256,
+          jobId,
+          appliedAt: "2026-11-20T09:30:00+08:00",
+          source: "boss",
+          candidate: { name: "Synthetic Candidate", position: "视频剪辑师" },
+        }),
+      }),
+    );
+    expect(input.jobId).toBe(jobId);
+    expect(input.appliedAt).toBe("2026-11-20T09:30:00+08:00");
+    expect(input.source).toBe("boss");
+  });
+
   it("rejects duplicate multipart fields", async () => {
     const input = request();
     const form = await input.formData();

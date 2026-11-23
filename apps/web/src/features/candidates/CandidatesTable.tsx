@@ -9,6 +9,7 @@ import type { Route } from "next";
 import {
   CheckCircle2,
   Download,
+  FileText,
   Mail,
   MoreHorizontal,
   RotateCcw,
@@ -17,6 +18,7 @@ import {
   Trash2,
   User,
   Users,
+  X,
   XCircle,
 } from "lucide-react";
 import { toast } from "@/lib/notification-island/toast";
@@ -80,6 +82,7 @@ export type CandidateRow = {
   fullName: string;
   email: string;
   phone: string | null;
+  headline?: string | null;
   location: string | null;
   avatarUrl: string | null;
   avatarFallbackSrcs: string[];
@@ -97,6 +100,8 @@ export type CandidateRow = {
   /** Epoch millis of last candidate update. */
   updatedAt: number;
   inPool: boolean;
+  /** Whether the candidate has at least one uploaded resume file. */
+  hasResume?: boolean;
   /** Has a pending or in-progress data-export/erasure request awaiting review. */
   hasOpenPrivacyRequest: boolean;
   isReferred: boolean;
@@ -146,6 +151,7 @@ export function CandidatesTable({
   pageInfo,
   initialFilters,
   filterOptions,
+  jobNamesById = {},
   emailTemplates = [],
   access,
 }: {
@@ -160,14 +166,23 @@ export function CandidatesTable({
     sources: string[];
     tags: string[];
   };
+  jobNamesById?: Record<string, string>;
   initialFilters?: {
     query: string;
     dept: string;
+    depts?: string[];
     role: string;
+    roles?: string[];
+    jobIds?: string[];
     stage: string;
     status: string;
     source: string;
     tag: string;
+    appliedAfter?: string;
+    appliedBefore?: string;
+    days?: string;
+    hasResume?: boolean;
+    list?: string;
     sort: string;
   };
   emailTemplates?: EmailTemplateOption[];
@@ -195,6 +210,8 @@ export function CandidatesTable({
   const [status, setStatus] = useState(initialFilters?.status ?? FILTER_ALL);
   const [source, setSource] = useState(initialFilters?.source ?? FILTER_ALL);
   const [tag, setTag] = useState(initialFilters?.tag ?? FILTER_ALL);
+  const [days, setDays] = useState(initialFilters?.days ?? FILTER_ALL);
+  const [hasResume, setHasResume] = useState(initialFilters?.hasResume ? "1" : FILTER_ALL);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   const [rejectTargets, setRejectTargets] = useState<RejectTarget[]>([]);
@@ -202,27 +219,52 @@ export function CandidatesTable({
   const [rejectOpen, setRejectOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const confirm = useConfirm();
+  const multiDepts = useMemo(() => initialFilters?.depts ?? [], [initialFilters?.depts]);
+  const multiRoles = useMemo(() => initialFilters?.roles ?? [], [initialFilters?.roles]);
+  const selectedJobIds = useMemo(() => initialFilters?.jobIds ?? [], [initialFilters?.jobIds]);
+  const appliedAfter = initialFilters?.appliedAfter ?? "";
+  const appliedBefore = initialFilters?.appliedBefore ?? "";
+  const listId = initialFilters?.list ?? "";
+
   // Rows open the candidate with this list's URL filters, so the candidate
   // page's previous / next walk this list and "Back" restores it.
   const origin = useMemo(
     () =>
       directoryOrigin({
         q: initialFilters?.query,
-        dept: initialFilters?.dept,
-        role: initialFilters?.role,
+        dept: multiDepts.length > 1 ? multiDepts : initialFilters?.dept,
+        role: multiRoles.length > 1 ? multiRoles : initialFilters?.role,
+        jobId: selectedJobIds.length > 0 ? selectedJobIds : undefined,
         stage: initialFilters?.stage,
         status: initialFilters?.status,
         source: initialFilters?.source,
         tag: initialFilters?.tag,
+        appliedAfter: appliedAfter || undefined,
+        appliedBefore: appliedBefore || undefined,
+        days: initialFilters?.days,
+        hasResume: initialFilters?.hasResume ? "1" : undefined,
+        list: listId || undefined,
         sort: initialFilters?.sort,
       }),
-    [initialFilters],
+    [initialFilters, multiDepts, multiRoles, selectedJobIds, appliedAfter, appliedBefore, listId],
   );
 
   function navigateWithFilter(key: string, value: string) {
     const params = new URLSearchParams(window.location.search);
     if (!value || value === FILTER_ALL || (key === "sort" && value === "recent")) params.delete(key);
     else params.set(key, value);
+    if (key === "days") {
+      params.delete("appliedAfter");
+      params.delete("appliedBefore");
+    }
+    params.delete("page");
+    const queryString = params.toString();
+    router.push(`/dashboard/candidates${queryString ? `?${queryString}` : ""}` as Route);
+  }
+
+  function removeUrlKeys(keys: string[]) {
+    const params = new URLSearchParams(window.location.search);
+    for (const key of keys) params.delete(key);
     params.delete("page");
     const queryString = params.toString();
     router.push(`/dashboard/candidates${queryString ? `?${queryString}` : ""}` as Route);
@@ -243,25 +285,23 @@ export function CandidatesTable({
     [filterOptions?.tags, rows],
   );
 
+  // Server-side `listCandidateDirectory` already applies all URL filters
+  // (including multi-value dept/role/jobId, date bounds, hasResume, saved lists,
+  // and non-latest-application matches). Only narrow live typing in the search
+  // box when it diverges from the server query so valid server rows are never hidden.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const base = rows.filter((r) => {
-      if (q) {
-        const hit =
-          r.fullName.toLowerCase().includes(q) ||
-          r.email.toLowerCase().includes(q) ||
-          (r.role ?? "").toLowerCase().includes(q) ||
-          (r.location ?? "").toLowerCase().includes(q);
-        if (!hit) return false;
-      }
-      if (dept !== FILTER_ALL && r.department !== dept) return false;
-      if (role !== FILTER_ALL && r.role !== role) return false;
-      if (stage !== FILTER_ALL && r.stage !== stage) return false;
-      if (status !== FILTER_ALL && r.status !== status) return false;
-      if (source !== FILTER_ALL && r.source !== source) return false;
-      if (tag !== FILTER_ALL && !r.tags.includes(tag)) return false;
-      return true;
-    });
+    const serverQ = (initialFilters?.query ?? "").trim().toLowerCase();
+    const base =
+      q && q !== serverQ
+        ? rows.filter(
+            (r) =>
+              r.fullName.toLowerCase().includes(q) ||
+              r.email.toLowerCase().includes(q) ||
+              (r.role ?? "").toLowerCase().includes(q) ||
+              (r.location ?? "").toLowerCase().includes(q),
+          )
+        : rows;
 
     return [...base].sort((a, b) => {
       if (sortKey === "name") return a.fullName.localeCompare(b.fullName);
@@ -272,15 +312,23 @@ export function CandidatesTable({
       const bRecent = Math.max(b.appliedAt ?? 0, b.updatedAt);
       return bRecent - aRecent;
     });
-  }, [rows, query, dept, role, stage, status, source, tag, sortKey]);
+  }, [rows, query, initialFilters?.query, sortKey]);
 
   const filtersActive =
     dept !== FILTER_ALL ||
+    multiDepts.length > 0 ||
     role !== FILTER_ALL ||
+    multiRoles.length > 0 ||
+    selectedJobIds.length > 0 ||
     stage !== FILTER_ALL ||
     status !== FILTER_ALL ||
     source !== FILTER_ALL ||
     tag !== FILTER_ALL ||
+    days !== FILTER_ALL ||
+    Boolean(appliedAfter) ||
+    Boolean(appliedBefore) ||
+    hasResume !== FILTER_ALL ||
+    Boolean(listId) ||
     query.trim() !== "";
 
   function clearFilters() {
@@ -291,6 +339,8 @@ export function CandidatesTable({
     setStatus(FILTER_ALL);
     setSource(FILTER_ALL);
     setTag(FILTER_ALL);
+    setDays(FILTER_ALL);
+    setHasResume(FILTER_ALL);
     router.push("/dashboard/candidates");
   }
 
@@ -506,11 +556,19 @@ export function CandidatesTable({
       const result = await exportCandidateDirectoryAction({
         query,
         department: dept === FILTER_ALL ? undefined : dept,
+        departments: multiDepts.length > 0 ? multiDepts : undefined,
         role: role === FILTER_ALL ? undefined : role,
+        roles: multiRoles.length > 0 ? multiRoles : undefined,
+        jobIds: selectedJobIds.length > 0 ? selectedJobIds : undefined,
         stage: stage === FILTER_ALL ? undefined : stage,
         status: exportStatus,
         source: source === FILTER_ALL ? undefined : source,
         tag: tag === FILTER_ALL ? undefined : tag,
+        appliedAfter: appliedAfter || undefined,
+        appliedBefore: appliedBefore || undefined,
+        days: days !== FILTER_ALL ? Number(days) : undefined,
+        hasResume: hasResume === "1" ? true : undefined,
+        listId: listId || undefined,
         sort: sortKey,
       });
       if (!result.success) {
@@ -529,9 +587,26 @@ export function CandidatesTable({
   }
 
   const total = pageInfo?.total ?? filtered.length;
-  const activeFilterCount = [dept, role, stage, status, source, tag].filter(
-    (v) => v !== FILTER_ALL,
-  ).length;
+  const activeFilterCount =
+    [dept, role, stage, status, source, tag, days, hasResume].filter(
+      (v) => v !== FILTER_ALL,
+    ).length +
+    (multiDepts.length > 1 ? 1 : 0) +
+    (multiRoles.length > 1 ? 1 : 0) +
+    (selectedJobIds.length > 0 ? 1 : 0) +
+    (appliedAfter || appliedBefore ? 1 : 0) +
+    (listId ? 1 : 0);
+
+  const activeRangeLabel =
+    appliedAfter && appliedBefore
+      ? `${appliedAfter.slice(0, 10)} ~ ${appliedBefore.slice(0, 10)}`
+      : appliedAfter
+        ? `>= ${appliedAfter.slice(0, 10)}`
+        : appliedBefore
+          ? `<= ${appliedBefore.slice(0, 10)}`
+          : "";
+
+  const selectedJobLabels = selectedJobIds.map((id) => jobNamesById[id] ?? id.slice(0, 8));
 
   return (
     <>
@@ -575,6 +650,24 @@ export function CandidatesTable({
               withdrawn: t("withdrawn"),
             }}
           />
+          <FilterChip
+            label={t("applied")}
+            value={days}
+            onChange={(value) => { setDays(value); navigateWithFilter("days", value); }}
+            options={["7", "30", "90"]}
+            labelMap={{
+              "7": "7d",
+              "30": "30d",
+              "90": "90d",
+            }}
+          />
+          <FilterChip
+            label="Resume"
+            value={hasResume}
+            onChange={(value) => { setHasResume(value); navigateWithFilter("hasResume", value); }}
+            options={["1"]}
+            labelMap={{ "1": "Has resume" }}
+          />
           {sources.length > 0 ? (
             <FilterChip
               label={t("source")}
@@ -617,6 +710,51 @@ export function CandidatesTable({
             </Button>
           ) : null}
         </FilterBar>
+
+        {(activeRangeLabel || multiDepts.length > 1 || multiRoles.length > 1 || selectedJobIds.length > 0) ? (
+          <div className="flex flex-wrap items-center gap-2 border-b border-hairline px-5 py-2.5 text-[12px]">
+            {activeRangeLabel ? (
+              <button
+                type="button"
+                onClick={() => removeUrlKeys(["appliedAfter", "appliedBefore"])}
+                className="inline-flex items-center gap-1.5 rounded-full bg-card-inset px-2.5 py-1 font-medium text-near-ink hover:bg-muted"
+              >
+                <span>{t("applied")}: {activeRangeLabel}</span>
+                <X className="size-3 text-soft-ink" />
+              </button>
+            ) : null}
+            {multiDepts.length > 1 ? (
+              <button
+                type="button"
+                onClick={() => removeUrlKeys(["dept"])}
+                className="inline-flex items-center gap-1.5 rounded-full bg-card-inset px-2.5 py-1 font-medium text-near-ink hover:bg-muted"
+              >
+                <span>{t("department")}: {multiDepts.join(", ")}</span>
+                <X className="size-3 text-soft-ink" />
+              </button>
+            ) : null}
+            {multiRoles.length > 1 ? (
+              <button
+                type="button"
+                onClick={() => removeUrlKeys(["role"])}
+                className="inline-flex items-center gap-1.5 rounded-full bg-card-inset px-2.5 py-1 font-medium text-near-ink hover:bg-muted"
+              >
+                <span>{t("job")}: {multiRoles.join(", ")}</span>
+                <X className="size-3 text-soft-ink" />
+              </button>
+            ) : null}
+            {selectedJobLabels.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => removeUrlKeys(["jobId"])}
+                className="inline-flex items-center gap-1.5 rounded-full bg-card-inset px-2.5 py-1 font-medium text-near-ink hover:bg-muted"
+              >
+                <span>{t("job")}: {selectedJobLabels.slice(0, 4).join(", ")}{selectedJobLabels.length > 4 ? ` +${selectedJobLabels.length - 4}` : ""}</span>
+                <X className="size-3 text-soft-ink" />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         <TotalLine
           total={total}
@@ -700,6 +838,15 @@ export function CandidatesTable({
                               <p className="truncate text-[14.5px] font-medium text-near-ink group-hover/row:underline">
                                 {row.fullName}
                               </p>
+                              {row.hasResume ? (
+                                <span
+                                  title="Resume attached"
+                                  className="inline-flex items-center gap-0.5 rounded-full bg-card-inset px-1.5 py-0.5 text-[11px] font-medium text-soft-ink"
+                                >
+                                  <FileText className="size-3" aria-hidden />
+                                  CV
+                                </span>
+                              ) : null}
                               {row.inPool ? (
                                 <StatusPill tone="warning" size="sm" icon={BookmarkSimpleIcon}>
                                   {t("inPool")}
@@ -717,8 +864,8 @@ export function CandidatesTable({
                               ) : null}
                             </div>
                             <p className="truncate text-[13px] text-soft-ink">
-                              {[row.role, row.location].filter(Boolean).join(" · ") ||
-                                row.email}
+                              {[row.role ?? row.headline, row.location].filter(Boolean).join(" · ") ||
+                                (row.email.endsWith("@boss.invalid") ? "" : row.email)}
                             </p>
                             {row.tags.length > 0 ? (
                               <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">

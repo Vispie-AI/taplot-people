@@ -1,11 +1,10 @@
 import "server-only";
 
-import { and, asc, desc, eq, exists, ilike, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 
 import {
   applications,
   candidates,
-  candidateTags,
   db,
   jobs,
   jobStages,
@@ -13,7 +12,6 @@ import {
 import { getTranslations } from "@/i18n/server";
 import {
   actorHasPermission,
-  candidateScopeSql,
   jobScopeSql,
   type WorkspaceSearchActor,
 } from "@/features/search/scope";
@@ -27,6 +25,12 @@ import {
   type CandidateOrigin,
   type DirectoryOriginFilters,
 } from "@/features/candidates/origin";
+import {
+  buildCandidateDirectoryPredicates,
+  originFiltersToDirectoryFilters,
+  resolveDirectoryListFilters,
+  type CandidateDirectoryFilters,
+} from "@/features/candidates/directory-query";
 import { locateInQueue, type QueueEntry, type QueuePosition } from "@/features/candidates/queue-position";
 
 /**
@@ -98,10 +102,10 @@ async function neighboursFromRanked(
 
 /**
  * Mirrors `listCandidateDirectory` (features/candidates/data.ts): same scope,
- * same latest-application rule, same filters and the same sort with its
- * tie-breaks. Keep the two in step.
+ * same filters (including multi-job, date range, hasResume and saved lists)
+ * and the same sort with its tie-breaks.
  */
-function rankedDirectory(actor: WorkspaceSearchActor, filters: DirectoryOriginFilters) {
+function rankedDirectory(actor: WorkspaceSearchActor, filters: CandidateDirectoryFilters) {
   const workspaceId = actor.workspaceId;
   const applicationScope = jobScopeSql(actor)
     ? inArray(
@@ -128,52 +132,7 @@ function rankedDirectory(actor: WorkspaceSearchActor, filters: DirectoryOriginFi
     .orderBy(asc(applications.candidateId), desc(applications.appliedAt), desc(applications.id))
     .as("nav_latest_application");
 
-  const predicates: (SQL | undefined)[] = [
-    eq(candidates.workspaceId, workspaceId),
-    isNull(candidates.deletedAt),
-    candidateScopeSql(actor, candidates.id),
-  ];
-  const query = filters.q?.trim().replace(/\s+/g, " ").slice(0, 100) ?? "";
-  if (query) {
-    const like = escapeLike(query);
-    predicates.push(
-      or(
-        ilike(candidates.firstName, like),
-        ilike(candidates.lastName, like),
-        ilike(candidates.email, like),
-        ilike(candidates.phone, like),
-        ilike(candidates.headline, like),
-        ilike(candidates.location, like),
-        ilike(jobs.title, like),
-        ilike(jobs.department, like),
-      ),
-    );
-  }
-  if (filters.dept) predicates.push(eq(jobs.department, filters.dept));
-  if (filters.role) predicates.push(eq(jobs.title, filters.role));
-  if (filters.stage) predicates.push(eq(jobStages.name, filters.stage));
-  if (filters.status) {
-    predicates.push(
-      eq(latestApplication.status, filters.status as "active" | "hired" | "rejected" | "withdrawn"),
-    );
-  }
-  if (filters.source) predicates.push(eq(latestApplication.source, filters.source));
-  if (filters.tag) {
-    predicates.push(
-      exists(
-        db
-          .select({ id: candidateTags.id })
-          .from(candidateTags)
-          .where(
-            and(
-              eq(candidateTags.workspaceId, workspaceId),
-              eq(candidateTags.candidateId, candidates.id),
-              eq(candidateTags.label, filters.tag),
-            ),
-          ),
-      ),
-    );
-  }
+  const predicates = buildCandidateDirectoryPredicates(actor, filters);
 
   const order =
     filters.sort === "name"
@@ -194,14 +153,6 @@ function rankedDirectory(actor: WorkspaceSearchActor, filters: DirectoryOriginFi
     })
     .from(candidates)
     .leftJoin(latestApplication, eq(latestApplication.candidateId, candidates.id))
-    .leftJoin(
-      jobs,
-      and(eq(jobs.id, latestApplication.jobId), eq(jobs.workspaceId, workspaceId), isNull(jobs.deletedAt)),
-    )
-    .leftJoin(
-      jobStages,
-      and(eq(jobStages.id, latestApplication.currentStageId), eq(jobStages.workspaceId, workspaceId)),
-    )
     .where(and(...predicates))
     .as("nav_directory");
 }
@@ -214,7 +165,11 @@ export async function getDirectoryNeighbours(
   if (!actorHasPermission(actor, "candidates:view")) {
     return { position: null, total: 0, prev: null, next: null };
   }
-  const ranked = rankedDirectory(actor, filters);
+  const { filters: resolved } = await resolveDirectoryListFilters(
+    actor.workspaceId,
+    originFiltersToDirectoryFilters(filters),
+  );
+  const ranked = rankedDirectory(actor, resolved);
   return neighboursFromRanked(ranked, eq(ranked.candidateId, candidateId));
 }
 

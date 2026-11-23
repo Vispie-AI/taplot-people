@@ -124,11 +124,19 @@ const emailLog = createLogger("candidate-email");
 const directoryExportSchema = z.object({
   query: z.string().trim().max(100).optional(),
   department: z.string().trim().max(120).optional(),
+  departments: z.array(z.string().trim().max(120)).max(50).optional(),
   role: z.string().trim().max(200).optional(),
+  roles: z.array(z.string().trim().max(200)).max(50).optional(),
+  jobIds: z.array(z.uuid()).max(50).optional(),
   stage: z.string().trim().max(120).optional(),
   status: z.enum(["active", "hired", "rejected", "withdrawn"]).optional(),
   source: z.string().trim().max(120).optional(),
   tag: z.string().trim().max(120).optional(),
+  appliedAfter: z.string().trim().max(40).optional(),
+  appliedBefore: z.string().trim().max(40).optional(),
+  days: z.number().int().min(1).max(365).optional(),
+  hasResume: z.boolean().optional(),
+  listId: z.uuid().optional(),
   sort: z.enum(["recent", "oldest", "modified", "name"]).optional(),
 });
 

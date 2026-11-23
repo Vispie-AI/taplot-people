@@ -9,6 +9,8 @@ vi.mock("@/lib/ssrf", () => ({ safeFetchHttp: vi.fn() }));
 import { McpToolError } from "../types";
 import { candidatesTools } from "./candidates";
 import {
+  candidateListUrl,
+  candidatesDirectoryUrl,
   candidateUrl,
   classifyFailure,
   cleanText,
@@ -99,6 +101,19 @@ describe("helpers", () => {
 
   it("builds links and consent summaries", () => {
     expect(candidateUrl("https://h.test", "c1", "a1")).toBe("https://h.test/dashboard/candidates/c1?application=a1");
+    expect(
+      candidatesDirectoryUrl("https://h.test", {
+        appliedAfter: "2026-10-25",
+        appliedBefore: "2026-11-23",
+        dept: ["Content", "Video"],
+        hasResume: "1",
+      }),
+    ).toBe(
+      "https://h.test/dashboard/candidates?dept=Content&dept=Video&appliedAfter=2026-10-25&appliedBefore=2026-11-23&hasResume=1",
+    );
+    expect(candidateListUrl("https://h.test", "6f1c1e0e-1111-4111-8111-111111111111")).toBe(
+      "https://h.test/dashboard/candidates?list=6f1c1e0e-1111-4111-8111-111111111111",
+    );
     const summary = summarizeConsent([
       { consentType: "data_processing", granted: true, withdrawnAt: null, createdAt: new Date("2026-01-01") },
       { consentType: "marketing", granted: true, withdrawnAt: new Date("2026-02-01"), createdAt: new Date("2026-01-01") },

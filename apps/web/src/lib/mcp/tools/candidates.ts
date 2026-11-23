@@ -22,7 +22,10 @@ import {
   getCandidateProfile,
   listCandidateDirectory,
   listCandidateDirectoryFacets,
+  summarizeCandidateDirectory,
 } from "@/features/candidates/data";
+import { createCandidateList } from "@/features/candidates/lists";
+import { cleanDirectoryFilters } from "@/features/candidates/origin";
 import { referCandidate } from "@/features/candidates/referrals/actions";
 import { createApplicationForApi } from "@/features/applications/service";
 import { generateJobMatchesAction } from "@/features/matching/actions";
@@ -43,6 +46,8 @@ import {
 import { defineMcpTool, McpToolError, type McpToolAnnotations, type McpToolDefinition } from "../types";
 import {
   appFileUrl,
+  candidateListUrl,
+  candidatesDirectoryUrl,
   candidateUrl,
   clampLimit,
   cleanText,
@@ -206,19 +211,27 @@ const candidatesSearch = defineMcpTool({
   name: "candidates_search",
   title: "Search candidates",
   description:
-    "Search and filter the candidate directory you can see (most recently active first). Matches the text query against name, email, phone, headline, location and the job title/department of the latest application. Each result has the candidate id, contact basics, tags, talent-pool and referral flags and the LATEST application (id, job, stage, status, source). To filter by a specific job or stage id, or to list every application of a candidate pool member, use applications_search instead. Use candidates_list_facets for valid department, role, stage, source and tag filter values. Open one result with candidates_get.",
+    "Search and filter the candidate directory you can see (deduplicated by candidate, most recently active first). Supports multi-job/multi-department filtering (matching ANY in-scope application, not only the latest), applied date bounds (`appliedAfter`/`appliedBefore` or `days`), and `hasResume` (at least one uploaded resume file). Always returns exact counts (`total`, `withResumeCount`, `byJob`) and server-verified clickable Taplot People links (`directoryUrl` and `resumeDirectoryUrl`) that can be shared directly instead of exporting spreadsheets. Use candidates_list_facets or jobs_list first to get valid department names and job IDs. Open one result with candidates_get.",
   group: "candidates",
   scope: "candidates:read",
   permission: "candidates:view",
   annotations: READ,
   input: z.object({
     query: z.string().trim().max(100).optional().describe("Free text: name, email, phone, headline, location, job title or department."),
-    department: z.string().trim().max(120).optional().describe("Exact department of the latest application's job."),
-    jobTitle: z.string().trim().max(200).optional().describe("Exact title of the latest application's job."),
-    stage: z.string().trim().max(120).optional().describe("Exact stage name of the latest application, e.g. 'Interview'."),
-    status: z.enum(STATUS_VALUES).optional().describe("Status of the latest application."),
-    source: z.string().trim().max(120).optional().describe("Exact application source, e.g. 'career_page', 'referral', 'sourced'."),
+    department: z.string().trim().max(120).optional().describe("Exact department of a matching job."),
+    departments: z.array(z.string().trim().min(1).max(120)).max(50).optional().describe("Multiple exact department names (matches candidates with an application in any of them)."),
+    jobTitle: z.string().trim().max(200).optional().describe("Exact title of a matching job."),
+    jobTitles: z.array(z.string().trim().min(1).max(200)).max(50).optional().describe("Multiple exact job titles (matches candidates with an application to any of them)."),
+    jobIds: z.array(z.uuid()).max(50).optional().describe("Preferred: one or more job UUIDs from jobs_list (matches candidates who applied to any of these jobs)."),
+    stage: z.string().trim().max(120).optional().describe("Exact stage name of a matching application, e.g. 'Interview'."),
+    status: z.enum(STATUS_VALUES).optional().describe("Status of a matching application."),
+    source: z.string().trim().max(120).optional().describe("Exact application source, e.g. 'boss', 'career_page', 'referral', 'sourced'."),
     tag: z.string().trim().max(120).optional().describe("Exact tag label."),
+    appliedAfter: z.string().trim().max(40).optional().describe("Only candidates who applied on or after this YYYY-MM-DD date or ISO 8601 timestamp."),
+    appliedBefore: z.string().trim().max(40).optional().describe("Only candidates who applied on or before this YYYY-MM-DD date or ISO 8601 timestamp."),
+    days: z.number().int().min(1).max(365).optional().describe("Convenience window: only candidates who applied within the last N days (1-365). Ignored if appliedAfter is set."),
+    hasResume: z.boolean().optional().describe("Set true to include only candidates with at least one uploaded resume file."),
+    listId: z.uuid().optional().describe("Saved shareable list UUID created by candidates_create_list."),
     sort: z.enum(["recent", "oldest", "modified", "name"]).default("recent").describe("recent = latest activity first, oldest = oldest application first, modified = last edited first, name = A-Z by last name."),
     limit: limitField,
     offset: offsetField,
@@ -227,33 +240,143 @@ const candidatesSearch = defineMcpTool({
     const limit = clampLimit(input.limit);
     const offset = input.offset;
     const window = directoryWindow(offset, limit);
+    const mergedDepts = Array.from(new Set([...(input.departments ?? []), ...(input.department ? [input.department] : [])]));
+    const mergedRoles = Array.from(new Set([...(input.jobTitles ?? []), ...(input.jobTitle ? [input.jobTitle] : [])]));
     const filters = {
       query: input.query,
-      department: input.department,
-      role: input.jobTitle,
+      departments: mergedDepts.length > 0 ? mergedDepts : undefined,
+      roles: mergedRoles.length > 0 ? mergedRoles : undefined,
+      jobIds: input.jobIds?.length ? input.jobIds : undefined,
       stage: input.stage,
       status: input.status,
       source: input.source,
       tag: input.tag,
+      appliedAfter: input.appliedAfter,
+      appliedBefore: input.appliedBefore,
+      days: input.days,
+      hasResume: input.hasResume,
+      listId: input.listId,
       sort: input.sort,
     };
-    const pages = [];
-    for (const page of window.pages) {
-      const result = await guard(() => listCandidateDirectory({ ...filters, page, pageSize: window.pageSize }));
-      pages.push(result);
-      if (!result.hasNextPage) break;
-    }
-    const total = pages[0]?.total ?? 0;
+    const [summary, pages] = await Promise.all([
+      guard(() => summarizeCandidateDirectory(filters)),
+      (async () => {
+        const list = [];
+        for (const page of window.pages) {
+          const result = await guard(() => listCandidateDirectory({ ...filters, page, pageSize: window.pageSize }));
+          list.push(result);
+          if (!result.hasNextPage) break;
+        }
+        return list;
+      })(),
+    ]);
+    const total = pages[0]?.total ?? summary.total;
     const slice = pages.flatMap((page) => page.rows).slice(window.skip, window.skip + limit);
     const anonymized = await anonymizedCandidateIds(ctx.workspaceId, slice.map((row) => row.id));
     const rows = slice.filter((row) => !anonymized.has(row.id));
     const nextOffset = offset + limit < total ? offset + limit : null;
+    const urlParams = {
+      q: input.query,
+      dept: mergedDepts.length > 1 ? mergedDepts : mergedDepts[0],
+      role: mergedRoles.length > 1 ? mergedRoles : mergedRoles[0],
+      jobId: input.jobIds?.length ? (input.jobIds.length > 1 ? input.jobIds : input.jobIds[0]) : undefined,
+      stage: input.stage,
+      status: input.status,
+      source: input.source,
+      tag: input.tag,
+      appliedAfter: input.appliedAfter,
+      appliedBefore: input.appliedBefore,
+      days: input.appliedAfter ? undefined : input.days ? String(input.days) : undefined,
+      hasResume: input.hasResume ? "1" : undefined,
+      list: input.listId,
+      sort: input.sort === "recent" ? undefined : input.sort,
+    };
+    const directoryUrl = candidatesDirectoryUrl(ctx.appOrigin, urlParams);
+    const resumeDirectoryUrl = candidatesDirectoryUrl(ctx.appOrigin, { ...urlParams, hasResume: "1" });
     return {
       total,
+      withResumeCount: summary.withResumeCount,
+      byJob: summary.byJob,
+      directoryUrl,
+      resumeDirectoryUrl,
       limit,
       offset,
       nextOffset,
       candidates: rows.map((row) => serializeDirectoryRow(row, ctx.appOrigin)),
+    };
+  },
+});
+
+const candidatesCreateList = defineMcpTool({
+  name: "candidates_create_list",
+  title: "Create shareable candidate list link",
+  description:
+    "Create a short, shareable Taplot People `/dashboard/candidates?list=<id>` link for either a structured filter view (mode='filter') or a curated shortlist of specific candidate IDs (mode='snapshot'). Use this when sharing complex multi-job queries or AI-shortlisted candidates in Lark instead of exporting spreadsheets. Returns the verified URL plus exact unique candidate and resume counts.",
+  group: "candidates",
+  scope: "candidates:write",
+  permission: "candidates:view",
+  annotations: WRITE_ONCE,
+  input: z.object({
+    title: z.string().trim().min(1).max(200).describe("Short display title shown at the top of the list view in Taplot People."),
+    description: z.string().trim().max(1000).optional().describe("Optional scope note explaining the criteria, date window, or included jobs."),
+    mode: z.enum(["filter", "snapshot"]).default("filter").describe("'filter' saves dynamic filter parameters; 'snapshot' pins an explicit list of candidateIds."),
+    candidateIds: z.array(z.uuid()).max(500).optional().describe("Required when mode='snapshot': candidate UUIDs to include in the shortlist."),
+    query: z.string().trim().max(100).optional().describe("Optional text filter when mode='filter'."),
+    departments: z.array(z.string().trim().min(1).max(120)).max(50).optional().describe("Optional department filter when mode='filter'."),
+    jobTitles: z.array(z.string().trim().min(1).max(200)).max(50).optional().describe("Optional job titles when mode='filter'."),
+    jobIds: z.array(z.uuid()).max(50).optional().describe("Optional job UUIDs when mode='filter'."),
+    stage: z.string().trim().max(120).optional().describe("Optional stage name when mode='filter'."),
+    status: z.enum(STATUS_VALUES).optional().describe("Optional application status when mode='filter'."),
+    source: z.string().trim().max(120).optional().describe("Optional source label when mode='filter'."),
+    tag: z.string().trim().max(120).optional().describe("Optional tag label when mode='filter'."),
+    appliedAfter: z.string().trim().max(40).optional().describe("Optional inclusive start date (YYYY-MM-DD or ISO datetime) when mode='filter'."),
+    appliedBefore: z.string().trim().max(40).optional().describe("Optional inclusive end date (YYYY-MM-DD or ISO datetime) when mode='filter'."),
+    days: z.number().int().min(1).max(365).optional().describe("Optional rolling day window (1-365) when mode='filter'."),
+    hasResume: z.boolean().optional().describe("Set true to include only candidates with an attached resume when mode='filter'."),
+  }),
+  async run(input, ctx) {
+    if (input.mode === "snapshot" && (!input.candidateIds || input.candidateIds.length === 0)) {
+      throw new McpToolError("Provide at least one candidateId when mode is 'snapshot'.", "invalid_input");
+    }
+    const filterSpec =
+      input.mode === "filter"
+        ? cleanDirectoryFilters({
+            q: input.query,
+            dept: input.departments?.length ? (input.departments.length > 1 ? input.departments : input.departments[0]) : undefined,
+            role: input.jobTitles?.length ? (input.jobTitles.length > 1 ? input.jobTitles : input.jobTitles[0]) : undefined,
+            jobId: input.jobIds?.length ? (input.jobIds.length > 1 ? input.jobIds : input.jobIds[0]) : undefined,
+            stage: input.stage,
+            status: input.status,
+            source: input.source,
+            tag: input.tag,
+            appliedAfter: input.appliedAfter,
+            appliedBefore: input.appliedBefore,
+            days: input.appliedAfter ? undefined : input.days ? String(input.days) : undefined,
+            hasResume: input.hasResume ? "1" : undefined,
+          })
+        : null;
+
+    const created = await guard(() =>
+      createCandidateList({
+        workspaceId: ctx.workspaceId,
+        createdById: ctx.userId,
+        title: input.title,
+        description: input.description,
+        mode: input.mode,
+        filterSpec,
+        candidateIds: input.mode === "snapshot" ? input.candidateIds : [],
+      }),
+    );
+    const summary = await guard(() => summarizeCandidateDirectory({ listId: created.id }));
+    return {
+      listId: created.id,
+      title: created.title,
+      description: created.description,
+      mode: created.mode,
+      total: summary.total,
+      withResumeCount: summary.withResumeCount,
+      byJob: summary.byJob,
+      url: candidateListUrl(ctx.appOrigin, created.id),
     };
   },
 });
@@ -1602,6 +1725,7 @@ const applicationsSetStatus = defineMcpTool({
 
 export const candidatesTools: McpToolDefinition[] = [
   candidatesSearch,
+  candidatesCreateList,
   candidatesListFacets,
   candidatesGet,
   candidatesGetResume,
