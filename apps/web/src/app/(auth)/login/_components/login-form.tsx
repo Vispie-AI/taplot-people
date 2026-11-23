@@ -195,12 +195,21 @@ export function LoginForm({
   async function continueWithLark() {
     setError(null);
     setPending("lark");
+    const larkErrorURL =
+      redirect && redirect !== "/dashboard"
+        ? `/login?larkError=1&redirect=${encodeURIComponent(redirect)}`
+        : "/login?larkError=1";
     try {
       const current = await authClient.getSession();
       if (current.error) throw new Error("Session unavailable");
       const result = current.data?.user
-        ? await authClient.linkSocial({ provider: "lark", callbackURL, errorCallbackURL: "/login?larkError=1" })
-        : await authClient.signIn.social({ provider: "lark", callbackURL, errorCallbackURL: "/login?larkError=1" });
+        ? await authClient.linkSocial({ provider: "lark", callbackURL, errorCallbackURL: larkErrorURL })
+        : await authClient.signIn.social({
+            provider: "lark",
+            callbackURL,
+            newUserCallbackURL: callbackURL,
+            errorCallbackURL: larkErrorURL,
+          });
       if (result.error) throw new Error("Lark unavailable");
     } catch {
       setError(t("larkFailed"));
