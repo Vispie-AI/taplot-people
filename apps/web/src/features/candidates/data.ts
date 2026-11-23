@@ -122,6 +122,7 @@ export type CandidateListItem = {
   hasOpenPrivacyRequest: boolean;
   isReferred: boolean;
   isFeaturedReferral: boolean;
+  createdAt?: Date;
   updatedAt: Date;
   latestApplication: {
     applicationId: string;
@@ -675,6 +676,7 @@ export async function listCandidateDirectory(
           location: sql<string | null>`coalesce(${candidates.address}, ${candidates.location})`,
           avatarUrl: candidates.avatarUrl,
           githubUrl: candidates.githubUrl,
+          createdAt: candidates.createdAt,
           updatedAt: candidates.updatedAt,
           applicationCount: sql<number>`coalesce(${applicationCounts.value}, 0)::int`,
           applicationId: latestApplication.id,
@@ -832,6 +834,7 @@ export async function listCandidateDirectory(
               appliedAt: row.appliedAt,
             }
           : null,
+      createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     })),
     total: Number(totalRow[0]?.total ?? 0),

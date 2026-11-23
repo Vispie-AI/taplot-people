@@ -260,27 +260,33 @@ export async function importBossResume(
       }
       targetJobId = explicitJob.id;
     } else if (input.candidate.position?.trim()) {
-      const pos = input.candidate.position.trim().toLowerCase();
-      const matchedJobs = await tx
-        .select({ id: jobs.id, status: jobs.status })
-        .from(jobs)
-        .where(
-          and(
-            eq(jobs.workspaceId, workspaceId),
-            isNull(jobs.deletedAt),
-            or(
-              sql`lower(${jobs.title}) = ${pos}`,
-              sql`lower(${jobs.slug}) = ${pos}`,
-            ),
-          ),
-        )
-        .limit(10);
-      if (matchedJobs.length === 1) {
-        targetJobId = matchedJobs[0]!.id;
-      } else if (matchedJobs.length > 1) {
-        const openMatches = matchedJobs.filter((j) => j.status === "open");
-        if (openMatches.length === 1) {
-          targetJobId = openMatches[0]!.id;
+      const normalizedPos = input.candidate.position
+        .replace(/^boss\s*直聘\s*[·•:\-—]\s*/i, "")
+        .replace(/[（(][^）)]*[）)]/g, (m) => m.replace("（", "(").replace("）", ")"))
+        .trim()
+        .toLowerCase();
+      if (normalizedPos && normalizedPos !== "unknown") {
+        const workspaceJobs = await tx
+          .select({ id: jobs.id, title: jobs.title, slug: jobs.slug, status: jobs.status })
+          .from(jobs)
+          .where(and(eq(jobs.workspaceId, workspaceId), isNull(jobs.deletedAt)));
+        const matchedJobs = workspaceJobs.filter((job) => {
+          if (job.title.startsWith("【作废】")) return false;
+          const titleLower = job.title.trim().toLowerCase();
+          const slugLower = job.slug.trim().toLowerCase();
+          if (titleLower === normalizedPos || slugLower === normalizedPos) return true;
+          // Match either side of bilingual "中文名 / English Title" job titles.
+          return titleLower
+            .split(/\s+\/\s+/)
+            .some((part) => part.trim() === normalizedPos);
+        });
+        if (matchedJobs.length === 1) {
+          targetJobId = matchedJobs[0]!.id;
+        } else if (matchedJobs.length > 1) {
+          const openMatches = matchedJobs.filter((j) => j.status === "open");
+          if (openMatches.length === 1) {
+            targetJobId = openMatches[0]!.id;
+          }
         }
       }
     }

@@ -251,13 +251,23 @@ export function CandidatesTable({
 
   function navigateWithFilter(key: string, value: string) {
     const params = new URLSearchParams(window.location.search);
-    if (!value || value === FILTER_ALL || (key === "sort" && value === "recent")) params.delete(key);
-    else params.set(key, value);
+    if (
+      !value ||
+      value === FILTER_ALL ||
+      (key === "sort" && value === "recent") ||
+      (key === "page" && value === "1")
+    ) {
+      params.delete(key);
+    } else {
+      params.set(key, value);
+    }
     if (key === "days") {
       params.delete("appliedAfter");
       params.delete("appliedBefore");
     }
-    params.delete("page");
+    if (key !== "page") {
+      params.delete("page");
+    }
     const queryString = params.toString();
     router.push(`/dashboard/candidates${queryString ? `?${queryString}` : ""}` as Route);
   }

@@ -149,7 +149,7 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
   const gravatarEnabled = await getWorkspaceGravatarEnabled(workspaceContext.organization.id);
 
   const rows: CandidateRow[] = directory.rows.map((candidate) => {
-    const applied = candidate.latestApplication?.appliedAt ?? null;
+    const applied = candidate.latestApplication?.appliedAt ?? candidate.createdAt ?? null;
     return {
       id: candidate.id,
       fullName: candidate.fullName,
