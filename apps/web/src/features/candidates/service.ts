@@ -55,22 +55,43 @@ export function serializeCandidate(candidate: Candidate) {
   };
 }
 
+/**
+ * Postgres stores `created_at` with microsecond precision but a JS `Date` only
+ * keeps milliseconds. A cursor built from `Date#toISOString()` therefore
+ * rounds the last row's timestamp down, and the keyset comparison then skips
+ * every row of the same millisecond that sorts after it (bulk imports create
+ * such bursts). The cursor carries the exact database timestamp instead, and
+ * the comparison happens in SQL.
+ */
+const CURSOR_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const createdAtCursorSql = sql<string>`to_char(${candidates.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+
 function cursorWhere(cursor: Cursor | null) {
   if (!cursor) return undefined;
-  const createdAt = new Date(cursor.createdAt);
+  if (!CURSOR_TIMESTAMP.test(cursor.createdAt) || !UUID.test(cursor.id)) {
+    throw ApiError.badRequest("Invalid `cursor`.");
+  }
+  const createdAt = sql`${cursor.createdAt}::timestamptz`;
   return or(
-    lt(candidates.createdAt, createdAt),
-    and(eq(candidates.createdAt, createdAt), lt(candidates.id, cursor.id)),
+    sql`${candidates.createdAt} < ${createdAt}`,
+    and(sql`${candidates.createdAt} = ${createdAt}`, lt(candidates.id, cursor.id)),
   );
 }
+
+export type CandidateListRow = Candidate & {
+  /** Exact (microsecond) `created_at`, to build the next-page cursor from. */
+  createdAtCursor: string;
+};
 
 export async function listCandidatesForApi(input: {
   workspaceId: string;
   cursor: Cursor | null;
   limit: number;
-}): Promise<Candidate[]> {
-  return db
-    .select()
+}): Promise<CandidateListRow[]> {
+  const rows = await db
+    .select({ candidate: candidates, createdAtCursor: createdAtCursorSql })
     .from(candidates)
     .where(
       and(
@@ -81,6 +102,10 @@ export async function listCandidatesForApi(input: {
     )
     .orderBy(desc(candidates.createdAt), desc(candidates.id))
     .limit(input.limit + 1);
+  return rows.map((row) => ({
+    ...row.candidate,
+    createdAtCursor: row.createdAtCursor,
+  }));
 }
 
 export async function getCandidateForApi(input: {

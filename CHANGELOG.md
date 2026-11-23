@@ -23,6 +23,10 @@ operators. How to cut a release is in [RELEASING.md](RELEASING.md). The
 
 - Upgrade the Taplot People deployment to upstream Harly 0.5.1 while retaining its existing checksum-verified BOSS resume import endpoint. Append the upstream audit migration after the already-applied integration migration.
 
+### Fixed
+
+- `GET /api/v1/candidates` no longer skips candidates while paging with `cursor`. The next-page cursor was rounded to milliseconds while the database keeps microseconds, so candidates created in the same millisecond as a page boundary (for example by a bulk import) were dropped. Cursors issued before this fix keep working.
+
 ## [0.5.1] - 2026-11-16
 
 This release fixes the findings of a security and correctness audit. It adds
