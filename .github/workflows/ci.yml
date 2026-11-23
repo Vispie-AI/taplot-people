@@ -294,15 +294,17 @@ jobs:
       - name: Apply migrations
         run: pnpm --filter @harly/db db:migrate:local
 
-      - name: Run deletion, Inbox isolation, RBAC and pipeline-load flows
+      - name: Run deletion, pagination, Inbox isolation, RBAC and pipeline-load flows
         run: >-
           RUN_CANDIDATE_DELETION_INTEGRATION=1
+          RUN_CANDIDATE_PAGINATION_INTEGRATION=1
           RUN_MAILBOX_INTEGRATION=1
           RUN_RBAC_INTEGRATION=1
           RUN_PIPELINE_LOAD_INTEGRATION=1
           RUN_RATE_LIMIT_INTEGRATION=1
           pnpm --filter web exec vitest run
           src/features/candidates/candidate-deletion.integration.test.ts
+          src/features/candidates/list-pagination.integration.test.ts
           src/features/mailbox/mailbox-isolation.integration.test.ts
           src/features/workspaces/permissions-rbac.integration.test.ts
           src/features/pipeline/pipeline-large-load.integration.test.ts
