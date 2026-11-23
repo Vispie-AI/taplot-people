@@ -121,6 +121,15 @@ function isMcpPath(pathname: string) {
   );
 }
 
+function loginRedirectUrl(request: NextRequest): URL {
+  const loginUrl = publicRedirectUrl(request, "/login");
+  const target = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+  if (target && target !== "/" && target !== "/dashboard") {
+    loginUrl.searchParams.set("redirect", target);
+  }
+  return loginUrl;
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -145,7 +154,7 @@ export async function proxy(request: NextRequest) {
     const token = request.cookies.get(PORTAL_SESSION_COOKIE)?.value;
     if (!token) {
       const loginUrl = publicRedirectUrl(request, "/portal/login");
-      loginUrl.searchParams.set("next", pathname);
+      loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
       return NextResponse.redirect(loginUrl);
     }
     return NextResponse.next();
@@ -163,7 +172,7 @@ export async function proxy(request: NextRequest) {
   const sessionCookie = getSessionCookie(request);
 
   if (!sessionCookie) {
-    return NextResponse.redirect(publicRedirectUrl(request, "/login"));
+    return NextResponse.redirect(loginRedirectUrl(request));
   }
 
   // Workspace security enforcement for protected paths. The IP allowlist,
@@ -177,9 +186,7 @@ export async function proxy(request: NextRequest) {
     const session = await auth.api.getSession({ headers: request.headers });
 
     if (!session?.user) {
-      const loginUrl = publicRedirectUrl(request, "/login");
-      loginUrl.searchParams.set("redirect", pathname);
-      return NextResponse.redirect(loginUrl);
+      return NextResponse.redirect(loginRedirectUrl(request));
     }
 
     try {

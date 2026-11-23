@@ -4,6 +4,11 @@ import { NextRequest } from "next/server";
 const state = vi.hoisted(() => ({
   results: [] as unknown[][],
   calls: 0,
+  cookie: "session-token" as string | null,
+  session: {
+    user: { id: "user-1", email: "member@example.test" },
+    session: { id: "sess-1", activeOrganizationId: "org-1" },
+  } as { user: { id: string; email: string }; session: { id: string; activeOrganizationId: string } } | null,
 }));
 
 function chain(result: unknown[]) {
@@ -18,14 +23,11 @@ function chain(result: unknown[]) {
   return new Proxy({}, handler);
 }
 
-vi.mock("@harly/auth/cookies", () => ({ getSessionCookie: () => "session-token" }));
+vi.mock("@harly/auth/cookies", () => ({ getSessionCookie: () => state.cookie }));
 vi.mock("@harly/auth", () => ({
   auth: {
     api: {
-      getSession: async () => ({
-        user: { id: "user-1", email: "member@example.test" },
-        session: { id: "sess-1", activeOrganizationId: "org-1" },
-      }),
+      getSession: async () => state.session,
     },
   },
 }));
@@ -89,6 +91,11 @@ function redirectPath(response: Response) {
 describe("proxy: setup gates on the security pages", () => {
   beforeEach(() => {
     vi.stubEnv("HARLY_URL", "https://ats.example.test");
+    state.cookie = "session-token";
+    state.session = {
+      user: { id: "user-1", email: "member@example.test" },
+      session: { id: "sess-1", activeOrganizationId: "org-1" },
+    };
   });
 
   it("lets a GET of /settings/security through while 2FA setup is pending", async () => {
@@ -157,4 +164,42 @@ it("does not force a disabled local credential change in Lark-only mode", async 
     setLookups({ mustChangePassword: true, require2fa: true });
     expect(redirectPath(await proxy(request("/dashboard")))).toBe("/setup-2fa");
   } finally { vi.unstubAllEnvs(); }
+});
+
+describe("proxy: post-login redirect preservation", () => {
+  beforeEach(() => {
+    vi.stubEnv("HARLY_URL", "https://ats.example.test");
+    state.cookie = "session-token";
+    state.session = {
+      user: { id: "user-1", email: "member@example.test" },
+      session: { id: "sess-1", activeOrganizationId: "org-1" },
+    };
+  });
+
+  it("preserves deep-link path and query string when unauthenticated without a session cookie", async () => {
+    state.cookie = null;
+    const target =
+      "/dashboard/candidates?dept=%E5%86%85%E5%AE%B9+Content&appliedAfter=2026-10-25&hasResume=1";
+    const response = await proxy(request(target));
+    const location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe("/login");
+    expect(location.searchParams.get("redirect")).toBe(target);
+  });
+
+  it("preserves repeated query params when session cookie is expired", async () => {
+    state.session = null;
+    const target = "/dashboard/candidates?jobId=11111111-1111-4111-8111-111111111111&jobId=22222222-2222-4222-8222-222222222222&hasResume=1";
+    const response = await proxy(request(target));
+    const location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe("/login");
+    expect(location.searchParams.get("redirect")).toBe(target);
+  });
+
+  it("keeps bare /dashboard login redirect clean without redundant redirect param", async () => {
+    state.cookie = null;
+    const response = await proxy(request("/dashboard"));
+    const location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe("/login");
+    expect(location.searchParams.get("redirect")).toBeNull();
+  });
 });
