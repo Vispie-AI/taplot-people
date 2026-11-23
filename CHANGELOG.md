@@ -23,6 +23,12 @@ operators. How to cut a release is in [RELEASING.md](RELEASING.md). The
 
 - Upgrade the Taplot People deployment to upstream Harly 0.5.1 while retaining its existing checksum-verified BOSS resume import endpoint. Append the upstream audit migration after the already-applied integration migration.
 
+### Fixed
+
+- `PATCH /api/v1/candidates/{id}` now saves `email`; before, it answered 200 and silently kept the old address. It also saves `location` and clears a nullable field when you send an explicit `null`. Fields the endpoint does not store are rejected with 422 instead of being dropped.
+- `PATCH /api/v1/candidates/{id}` accepts an optional `expectedEmail` body field or `If-Match: <email>` header and writes nothing (409 `email_precondition_failed`) when the stored email differs. An email already used by another active candidate returns 409 `candidate_email_exists` (never merged; the unique-index race maps to the same 409). A request that changes nothing returns 200 without writing or emitting events, and `Idempotency-Key` is supported. `candidate.updated` now carries the changed fields and, for email, `changes.email`.
+- `POST /api/v1/candidates` now stores `location`.
+
 ## [0.5.1] - 2026-11-16
 
 This release fixes the findings of a security and correctness audit. It adds

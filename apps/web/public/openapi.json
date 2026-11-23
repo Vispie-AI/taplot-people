@@ -6164,6 +6164,7 @@
       },
       "patch": {
         "summary": "Update candidate",
+        "description": "Fields that are omitted stay unchanged; an explicit `null` clears a nullable field. `email` is written. Send `expectedEmail` (or an `If-Match: <email>` header) to write only if the stored email still matches; otherwise 409 `email_precondition_failed`. An email used by another active candidate returns 409 `candidate_email_exists`. A request that changes nothing returns 200 without writing or emitting events.",
         "operationId": "updateCandidate",
         "tags": [
           "Candidates"
@@ -6413,6 +6414,39 @@
             }
           },
           "404": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
             "description": "OK",
             "content": {
               "application/json": {
@@ -6785,6 +6819,10 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "expectedEmail": {
+                    "type": "string",
+                    "maxLength": 320
                   }
                 },
                 "additionalProperties": false

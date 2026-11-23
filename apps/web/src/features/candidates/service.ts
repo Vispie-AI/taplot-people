@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
 
 import { ApiError, type Cursor } from "@harly/api";
 import { db, candidates, type Candidate } from "@harly/db";
@@ -131,6 +131,7 @@ export async function createCandidateForApi(input: {
         email,
         phone: input.values.phone ?? null,
         address: input.values.address ?? null,
+        location: input.values.location ?? null,
         headline: input.values.headline ?? null,
         summary: input.values.summary ?? null,
         linkedinUrl: input.values.linkedinUrl ?? null,
@@ -169,69 +170,183 @@ export async function createCandidateForApi(input: {
   return candidate;
 }
 
+const CANDIDATE_EMAIL_INDEX = "candidates_workspace_email_idx";
+
+function isCandidateEmailUniqueViolation(error: unknown): boolean {
+  // drizzle wraps driver errors, so look at the error and its cause chain.
+  for (let e: unknown = error, i = 0; e && i < 4; i++, e = (e as { cause?: unknown }).cause) {
+    const err = e as { code?: unknown; constraint_name?: unknown; constraint?: unknown };
+    if (
+      err.code === "23505" &&
+      (err.constraint_name === CANDIDATE_EMAIL_INDEX ||
+        err.constraint === CANDIDATE_EMAIL_INDEX)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function emailExistsError(candidateId?: string) {
+  return ApiError.conflictWithReason(
+    "candidate_email_exists",
+    "Another candidate already uses this email.",
+    candidateId ? { candidateId } : undefined,
+  );
+}
+
+type CandidateUpdateValues = Partial<CandidateApiInput> & {
+  /** Optimistic guard: only write when the stored email still equals this. */
+  expectedEmail?: string;
+};
+
+const UPDATABLE_FIELDS = [
+  "firstName",
+  "lastName",
+  "phone",
+  "address",
+  "location",
+  "headline",
+  "summary",
+  "linkedinUrl",
+  "githubUrl",
+  "websiteUrl",
+  "educationEntries",
+  "experienceEntries",
+] as const;
+
 export async function updateCandidateForApi(input: {
   workspaceId: string;
   candidateId: string;
-  values: Partial<CandidateApiInput>;
+  values: CandidateUpdateValues;
+  actorKeyId?: string;
 }): Promise<Candidate> {
-  const existing = await getCandidateForApi({
-    workspaceId: input.workspaceId,
-    candidateId: input.candidateId,
-  });
+  const { expectedEmail, ...values } = input.values;
+  const newEmail = values.email?.trim().toLowerCase();
 
-  const { updated, event } = await db.transaction(async (tx) => {
-    const [candidate] = await tx
-      .update(candidates)
-      .set({
-        firstName: input.values.firstName ?? existing.firstName,
-        lastName: input.values.lastName ?? existing.lastName,
-        phone: input.values.phone ?? existing.phone,
-        address: input.values.address ?? existing.address,
-        headline: input.values.headline ?? existing.headline,
-        summary: input.values.summary ?? existing.summary,
-        linkedinUrl: input.values.linkedinUrl ?? existing.linkedinUrl,
-        githubUrl: input.values.githubUrl ?? existing.githubUrl,
-        websiteUrl: input.values.websiteUrl ?? existing.websiteUrl,
-        educationEntries:
-          input.values.educationEntries ?? existing.educationEntries,
-        experienceEntries:
-          input.values.experienceEntries ?? existing.experienceEntries,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(candidates.id, input.candidateId),
-          eq(candidates.workspaceId, input.workspaceId),
-        ),
-      )
-      .returning();
-    if (!candidate) throw ApiError.notFound("Candidate not found.");
-    return {
-      updated: candidate,
-      event: await persistDomainEvent(tx, {
-        name: "candidate.updated",
-        workspaceId: input.workspaceId,
-        aggregateType: "candidate",
-        aggregateId: candidate.id,
-        payload: { candidate: serializeCandidate(candidate) },
-      }),
-    };
-  });
+  const result = await db
+    .transaction(async (tx) => {
+      // Lock the row so the precondition, the duplicate check and the write
+      // see one consistent state.
+      const [existing] = await tx
+        .select()
+        .from(candidates)
+        .where(
+          and(
+            eq(candidates.id, input.candidateId),
+            eq(candidates.workspaceId, input.workspaceId),
+            isNull(candidates.deletedAt),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!existing) throw ApiError.notFound("Candidate not found.");
 
-  await publishPersistedDomainEvents([event]);
+      if (
+        expectedEmail !== undefined &&
+        existing.email.trim().toLowerCase() !==
+          expectedEmail.trim().toLowerCase()
+      ) {
+        throw ApiError.conflictWithReason(
+          "email_precondition_failed",
+          "The stored email no longer matches `expectedEmail`; nothing was written.",
+        );
+      }
+
+      // `undefined` leaves a field alone; an explicit `null` clears it.
+      const set: Partial<typeof candidates.$inferInsert> = {};
+      const changedFields: string[] = [];
+      for (const field of UPDATABLE_FIELDS) {
+        const incoming = values[field];
+        if (incoming === undefined) continue;
+        const next =
+          field === "educationEntries" || field === "experienceEntries"
+            ? (incoming ?? [])
+            : incoming;
+        if (JSON.stringify(next) === JSON.stringify(existing[field])) continue;
+        (set as Record<string, unknown>)[field] = next;
+        changedFields.push(field);
+      }
+      const emailChanged =
+        newEmail !== undefined &&
+        newEmail !== existing.email.trim().toLowerCase();
+      if (emailChanged) {
+        const [duplicate] = await tx
+          .select({ id: candidates.id })
+          .from(candidates)
+          .where(
+            and(
+              eq(candidates.workspaceId, input.workspaceId),
+              sql`lower(${candidates.email}) = ${newEmail}`,
+              ne(candidates.id, input.candidateId),
+              isNull(candidates.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (duplicate) throw emailExistsError(duplicate.id);
+        set.email = newEmail;
+        changedFields.push("email");
+      }
+
+      // Nothing differs (for example the same email sent twice): no write,
+      // no `updatedAt` bump, no event.
+      if (changedFields.length === 0) {
+        return { candidate: existing, event: null, changedFields };
+      }
+
+      const [candidate] = await tx
+        .update(candidates)
+        .set({ ...set, updatedAt: new Date() })
+        .where(
+          and(
+            eq(candidates.id, input.candidateId),
+            eq(candidates.workspaceId, input.workspaceId),
+          ),
+        )
+        .returning();
+      if (!candidate) throw ApiError.notFound("Candidate not found.");
+      return {
+        candidate,
+        changedFields,
+        event: await persistDomainEvent(tx, {
+          name: "candidate.updated",
+          workspaceId: input.workspaceId,
+          aggregateType: "candidate",
+          aggregateId: candidate.id,
+          payload: {
+            candidate: serializeCandidate(candidate),
+            changedFields,
+            ...(emailChanged
+              ? { changes: { email: { from: existing.email, to: newEmail } } }
+              : {}),
+          },
+        }),
+      };
+    })
+    .catch((error: unknown) => {
+      // The unique index is the backstop for a concurrent writer that won
+      // the race after our duplicate check.
+      if (isCandidateEmailUniqueViolation(error)) throw emailExistsError();
+      throw error;
+    });
+
+  if (!result.event) return result.candidate;
+
+  await publishPersistedDomainEvents([result.event]);
   await emitWebhookEvent(input.workspaceId, "candidate.updated", {
-    candidate: serializeCandidate(updated),
-    eventId: event.eventId,
-  }, { skipDomainEvent: true, eventId: event.eventId });
+    candidate: serializeCandidate(result.candidate),
+    eventId: result.event.eventId,
+  }, { skipDomainEvent: true, eventId: result.event.eventId });
   await logAuditEvent({
     workspaceId: input.workspaceId,
     action: "candidate.updated",
+    actorId: input.actorKeyId,
     resourceType: "candidate",
     resourceId: input.candidateId,
     severity: "info",
-    metadata: { via: "api" },
+    metadata: { via: "api", changedFields: result.changedFields.join(",") },
   });
-  return updated;
+  return result.candidate;
 }
 
 export async function deleteCandidateForApi(input: {
