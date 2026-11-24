@@ -1512,6 +1512,8 @@
     "advanced": {
       "publicSlug": "Openbare URL-slug",
       "slugHint": "Laat leeg om een slug te maken op basis van de functietitel.",
+      "shortCode": "Korte code voor kandidaatlinks",
+      "shortCodeHint": "Optioneel. Leesbare code voor korte kandidaatlinks, bijv. narr-jr geeft /c/narr-jr?days=14. Niet zichtbaar op de openbare pagina.",
       "experience": "Ervaring",
       "experiencePlaceholder": "Medior / senior · 3–5 jaar",
       "education": "Opleiding",
@@ -1984,6 +1986,9 @@
       "nameAZ": "Naam A–Z",
       "exportSelected": "Selectie exporteren ({count})",
       "exportCsv": "CSV exporteren",
+      "copyShortLink": "Korte link kopiëren",
+      "shortLinkCopied": "Korte link gekopieerd",
+      "shortLinkFailed": "Kon de korte link niet maken",
       "page": "Pagina {page}",
       "previous": "Vorige",
       "next": "Volgende",

@@ -37,6 +37,7 @@ function parseJobFormData(formData: FormData) {
   return jobFormSchema.parse({
     title: formData.get("title"),
     slug: formData.get("slug"),
+    shortCode: formData.get("shortCode"),
     department: formData.get("department"),
     location: formData.get("location"),
     employmentType: formData.get("employmentType"),

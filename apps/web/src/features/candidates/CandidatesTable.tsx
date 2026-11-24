@@ -33,6 +33,7 @@ import { addToPoolAction, removeFromPoolAction } from "@/features/pool/actions";
 import { bulkDecisionConfirmCopy } from "@/features/pipeline/confirmation";
 import { toSafeCsv } from "@/lib/csv";
 import { candidateHref, directoryOrigin } from "@/features/candidates/origin";
+import { CopyShortLinkButton } from "@/features/candidates/CopyShortLinkButton";
 import { BulkEmailDrawer } from "@/features/candidates/BulkEmailDrawer";
 import {
   RejectDialog,
@@ -708,10 +709,13 @@ export function CandidatesTable({
             }}
             allValue="recent"
           />
+          <span className="ml-auto flex items-center gap-2">
+            {origin.kind === "candidates" ? <CopyShortLinkButton filters={origin.filters} /> : null}
+          </span>
           {canExport ? (
             <Button
               variant="soft"
-              className="ml-auto h-9 rounded-full"
+              className="h-9 rounded-full"
               onClick={exportCsv}
               disabled={isPending}
             >

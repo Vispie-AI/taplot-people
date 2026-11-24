@@ -1512,6 +1512,8 @@
     "advanced": {
       "publicSlug": "Public URL slug",
       "slugHint": "Leave blank to generate one from the job title.",
+      "shortCode": "Short code for candidate links",
+      "shortCodeHint": "Optional. Readable code for short candidate links, e.g. narr-jr gives /c/narr-jr?days=14. Not shown on the public job page.",
       "experience": "Experience",
       "experiencePlaceholder": "Mid-level / Senior · 3–5 years",
       "education": "Education",
@@ -1984,6 +1986,9 @@
       "nameAZ": "Name A–Z",
       "exportSelected": "Export selected ({count})",
       "exportCsv": "Export CSV",
+      "copyShortLink": "Copy short link",
+      "shortLinkCopied": "Short link copied",
+      "shortLinkFailed": "Could not create the short link",
       "page": "Page {page}",
       "previous": "Previous",
       "next": "Next",

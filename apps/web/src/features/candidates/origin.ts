@@ -70,6 +70,15 @@ const MAX_MULTI = 50;
 /** "__all__" and friends are UI sentinels for "no filter", never values. */
 const SENTINEL = /^__.*__$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Alphabet of saved-filter short ids (`/v/<id>`): no 0/1/i/l/o. */
+export const SHORT_ID_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
+export const SHORT_ID_LENGTH = 7;
+const SHORT_ID_PATTERN = new RegExp(`^[${SHORT_ID_ALPHABET}]{${SHORT_ID_LENGTH}}$`);
+
+export function isShortId(value: string | null | undefined): value is string {
+  return typeof value === "string" && SHORT_ID_PATTERN.test(value);
+}
+
 const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 function read(params: ParamSource, key: string): string | undefined {
@@ -232,8 +241,11 @@ export function cleanDirectoryFilters(
       continue;
     }
     if (key === "list") {
-      const cleaned = cleanId(single);
-      if (cleaned) filters.list = cleaned;
+      // A saved filter is named by its UUID or by its short id (`/v/<id>`).
+      const text = cleanText(single);
+      if (text && (UUID.test(text) || isShortId(text.toLowerCase()))) {
+        filters.list = text.toLowerCase();
+      }
       continue;
     }
     const value = cleanText(single);

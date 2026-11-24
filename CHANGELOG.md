@@ -15,6 +15,8 @@ operators. How to cut a release is in [RELEASING.md](RELEASING.md). The
 
 ### Added
 
+- Short, readable candidate links. Give a job a short code (job form, Advanced, "Short code for candidate links"; also the `shortCode` field of the MCP job tools) and open its candidates at `/c/<code>?days=14&source=boss`, or use `?role=<code>` on the candidates page. A job's public slug works too. The **Copy short link** button on the candidates page saves the current filters and copies a `/v/<id>` link; the same filters always give the same link. Both forms list exactly the people the long `/dashboard/candidates?...` link lists, and every older long link, `?list=<uuid>` link included, keeps working. MCP `candidates_search` now returns a readable `title` and, for one job with a short code, a `shortUrl`; `candidates_create_list` returns a `shortUrl` and accepts a short id as `listId`. Needs the new migration `0171_short_links`; no data is changed.
+
 - Operators can opt in to automatic Harly Administrator enrollment on the first verified Lark sign-in. Existing workspace roles and the default authentication mode remain available.
 
 - Optional Lark staff sign-in with enterprise identity and existing membership checks, plus a server-enforced Lark-only mode that preserves existing accounts and invitation roles. Candidate portal login and API keys remain independent.

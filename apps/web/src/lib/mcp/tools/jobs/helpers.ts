@@ -15,6 +15,7 @@ import {
   type JobBoardConfig,
   type JobContentSection,
 } from "@/features/jobs/config";
+import { normalizeShortCode } from "@/features/candidates/short-links";
 import type { JobFormValues } from "@/features/jobs/validation";
 import { EVALUATION_MODES, type EvaluationMode } from "@/lib/evaluation/mode";
 import { McpToolError } from "../../types";
@@ -40,6 +41,12 @@ export const jobFieldsShape = {
     .max(120)
     .optional()
     .describe("URL slug. Omit to keep the current one (new jobs derive it from the title). Must stay stable once the job is public."),
+  shortCode: z
+    .string()
+    .trim()
+    .max(40)
+    .optional()
+    .describe("Short readable code for candidate filter links, e.g. 'narr-jr' (/c/narr-jr?days=14). Letters, digits and hyphens; empty string clears it. Unlike the slug it is never public."),
   department: z.string().trim().max(120).nullable().optional().describe("Department name, e.g. Engineering. null clears it."),
   sector: z.string().trim().max(120).nullable().optional().describe("Industry / sector label. null clears it."),
   location: z.string().trim().max(200).nullable().optional().describe("Human location, e.g. 'Madrid, Spain'. null clears it."),
@@ -174,6 +181,7 @@ export function jobToFormValues(job: Job): JobFormValues {
   return {
     title: job.title,
     slug: job.slug,
+    shortCode: job.shortCode ?? undefined,
     department: job.department ?? undefined,
     sector: job.sector ?? undefined,
     location: job.location ?? undefined,
@@ -209,6 +217,7 @@ export function newJobBase(title: string): JobFormValues {
   return {
     title,
     slug: undefined,
+    shortCode: undefined,
     department: undefined,
     sector: undefined,
     location: undefined,
@@ -253,6 +262,7 @@ export function mergeJobValues(base: JobFormValues, patch: JobFieldsPatch): JobF
 
   if (patch.title !== undefined) next.title = patch.title.trim();
   if (patch.slug !== undefined) next.slug = patch.slug.trim() || undefined;
+  if (patch.shortCode !== undefined) next.shortCode = normalizeShortCode(patch.shortCode) ?? undefined;
   if (patch.employmentType !== undefined) next.employmentType = patch.employmentType;
   if (patch.workplaceType !== undefined) next.workplaceType = patch.workplaceType;
   if (patch.evaluationMode !== undefined) next.evaluationMode = patch.evaluationMode;
@@ -499,6 +509,7 @@ export type JobListRow = {
   id: string;
   title: string;
   slug: string;
+  shortCode?: string | null;
   department: string | null;
   location: string | null;
   employmentType: string;
@@ -542,6 +553,7 @@ export function serializeJobListRow(
     id: row.id,
     title: row.title,
     slug: row.slug,
+    shortCode: row.shortCode ?? null,
     status: row.status,
     department: row.department,
     location: row.location,
@@ -578,6 +590,7 @@ export function serializeJobDetail(
     id: job.id,
     title: job.title,
     slug: job.slug,
+    shortCode: job.shortCode,
     status: job.status,
     department: job.department,
     sector: job.sector,

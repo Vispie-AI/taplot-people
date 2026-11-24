@@ -24,6 +24,7 @@ import {
 } from "@/features/candidates/data";
 import { originFiltersToDirectoryFilters } from "@/features/candidates/directory-query";
 import { getCandidateList } from "@/features/candidates/lists";
+import { expandDirectoryRoleAliases } from "@/features/candidates/job-refs";
 import { DirectoryTabs, PageTitleRow } from "@/features/candidates/directory-chrome";
 import { TrashCandidateActions } from "@/features/candidates/TrashCandidateActions";
 import { AddCandidateDrawer } from "@/features/candidates/AddCandidateDrawer";
@@ -99,7 +100,10 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
       : undefined;
 
   const parsedOrigin = directoryOrigin(rawParams);
-  const urlFilters = parsedOrigin.kind === "candidates" ? parsedOrigin.filters : {};
+  // `role=<job short code or slug>` means that job's title (short links).
+  const urlFilters = await expandDirectoryRoleAliases(
+    parsedOrigin.kind === "candidates" ? parsedOrigin.filters : {},
+  );
   const mappedFilters = originFiltersToDirectoryFilters(urlFilters);
 
   const directoryFilters: CandidateDirectoryFilters = {
