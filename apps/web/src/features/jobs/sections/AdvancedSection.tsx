@@ -81,6 +81,22 @@ export function AdvancedSection({
           />
         </FieldBox>
 
+        <FieldBox
+          className="sm:col-span-2"
+          label={t("shortCode")}
+          htmlFor="shortCode"
+          hint={t("shortCodeHint")}
+        >
+          <Input
+            id="shortCode"
+            name="shortCode"
+            defaultValue={job?.shortCode ?? ""}
+            placeholder="narr-jr"
+            maxLength={40}
+            className={fieldBoxControlClassName}
+          />
+        </FieldBox>
+
         <FieldBox label={t("experience")} htmlFor="experienceLevel">
           <Input
             id="experienceLevel"

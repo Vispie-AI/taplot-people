@@ -1363,6 +1363,10 @@ export const jobs = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     slug: text("slug").notNull(),
+    // Short readable code for internal filter links (`/c/<shortCode>`,
+    // `?role=<shortCode>`), e.g. "narr-jr". Unlike `slug` it never appears on
+    // the public job page, so it can change without breaking shared job links.
+    shortCode: text("short_code"),
     department: text("department"),
     location: text("location"),
     employmentType: employmentTypeEnum("employment_type").notNull(),
@@ -1421,6 +1425,9 @@ export const jobs = pgTable(
     uniqueIndex("jobs_workspace_slug_idx")
       .on(table.workspaceId, table.slug)
       .where(sql`${table.deletedAt} is null`),
+    uniqueIndex("jobs_workspace_short_code_idx")
+      .on(table.workspaceId, sql`lower(${table.shortCode})`)
+      .where(sql`${table.deletedAt} is null and ${table.shortCode} is not null`),
     index("jobs_workspace_status_idx").on(table.workspaceId, table.status),
     index("jobs_workspace_created_at_idx").on(
       table.workspaceId,
@@ -6532,6 +6539,8 @@ export const candidateLists = pgTable(
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    // Short public id used by `/v/<shortId>`; null for lists created before it existed.
+    shortId: text("short_id"),
     title: text("title").notNull(),
     description: text("description"),
     // "filter" = dynamic saved filter view; "snapshot" = fixed shortlist of candidate ids
@@ -6554,6 +6563,7 @@ export const candidateLists = pgTable(
       table.workspaceId,
       table.createdAt,
     ),
+    uniqueIndex("candidate_lists_short_id_idx").on(table.shortId),
     check(
       "candidate_lists_mode_check",
       sql`${table.mode} in ('filter', 'snapshot')`,

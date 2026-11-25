@@ -67,6 +67,7 @@ export async function listJobsPage(filters: JobListFilters): Promise<{ rows: Job
         id: jobs.id,
         title: jobs.title,
         slug: jobs.slug,
+        shortCode: jobs.shortCode,
         department: jobs.department,
         location: jobs.location,
         employmentType: jobs.employmentType,

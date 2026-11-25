@@ -1512,6 +1512,8 @@
     "advanced": {
       "publicSlug": "Öffentlicher URL-Slug",
       "slugHint": "Leer lassen, damit er aus dem Jobtitel erstellt wird.",
+      "shortCode": "Kurzcode für Bewerberlinks",
+      "shortCodeHint": "Optional. Lesbarer Code für kurze Bewerberlinks, z. B. narr-jr ergibt /c/narr-jr?days=14. Wird auf der öffentlichen Seite nicht angezeigt.",
       "experience": "Berufserfahrung",
       "experiencePlaceholder": "Mid-Level / Senior · 3–5 Jahre",
       "education": "Ausbildung",
@@ -1984,6 +1986,9 @@
       "nameAZ": "Name A–Z",
       "exportSelected": "Auswahl exportieren ({count})",
       "exportCsv": "CSV exportieren",
+      "copyShortLink": "Kurzlink kopieren",
+      "shortLinkCopied": "Kurzlink kopiert",
+      "shortLinkFailed": "Kurzlink konnte nicht erstellt werden",
       "page": "Seite {page}",
       "previous": "Zurück",
       "next": "Weiter",

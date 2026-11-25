@@ -1512,6 +1512,8 @@
     "advanced": {
       "publicSlug": "Slug public",
       "slugHint": "Laissez ce champ vide pour le générer à partir de l’intitulé.",
+      "shortCode": "Code court pour les liens candidats",
+      "shortCodeHint": "Facultatif. Code lisible pour des liens candidats courts, p. ex. narr-jr donne /c/narr-jr?days=14. Non affiché sur la page publique.",
       "experience": "Expérience",
       "experiencePlaceholder": "Intermédiaire / senior · 3 à 5 ans",
       "education": "Formation",
@@ -1984,6 +1986,9 @@
       "nameAZ": "Nom A–Z",
       "exportSelected": "Exporter la sélection ({count})",
       "exportCsv": "Exporter en CSV",
+      "copyShortLink": "Copier le lien court",
+      "shortLinkCopied": "Lien court copié",
+      "shortLinkFailed": "Impossible de créer le lien court",
       "page": "Page {page}",
       "previous": "Précédent",
       "next": "Suivant",

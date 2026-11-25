@@ -56,6 +56,25 @@ status changes because of an archive.
   </Step>
 </Steps>
 
+## Short links to a filtered list
+
+A filtered candidate list has a long address, and it gets longer with every
+filter. Two short forms open the same list:
+
+- **A job's short code.** Set **Short code for candidate links** under
+  **Advanced** in the job form (for example `narr-jr`). Then
+  `/c/narr-jr?days=14&source=boss` lists that job's candidates with the extra
+  filters, and `/dashboard/candidates?role=narr-jr` works too. A job's public
+  URL slug is accepted in the same places. The short code is never shown on the
+  public job page.
+- **A saved filter.** Filter the list, then choose **Copy short link**. Harly
+  saves the filters and copies a link like `/v/k7m2x9p`. The same filters
+  always give the same link, and the saved filter keeps matching new
+  applications (for example "last 14 days").
+
+Both forms show exactly the candidates the long link shows, and the viewer's
+role and job scope still apply. Long links keep working.
+
 ## Review queue
 
 The review queue lists the applications waiting on your review. Open it from

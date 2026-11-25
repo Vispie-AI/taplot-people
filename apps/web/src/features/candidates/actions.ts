@@ -52,6 +52,7 @@ import {
   publishPersistedDomainEvents,
 } from "@/server/events/emit";
 import { serializeCandidate } from "./service";
+import { isShortId } from "./origin";
 import { EMAIL_DRAFT_TYPES, type EmailDraftType } from "./email-draft-types";
 import { createScorecardForApi } from "@/features/scorecards/service";
 import { ApiError } from "@harly/api";
@@ -136,7 +137,12 @@ const directoryExportSchema = z.object({
   appliedBefore: z.string().trim().max(40).optional(),
   days: z.number().int().min(1).max(365).optional(),
   hasResume: z.boolean().optional(),
-  listId: z.uuid().optional(),
+  // A saved list: its UUID or its short id (`/v/<id>`).
+  listId: z
+    .string()
+    .trim()
+    .refine((value) => z.uuid().safeParse(value).success || isShortId(value.toLowerCase()))
+    .optional(),
   sort: z.enum(["recent", "oldest", "modified", "name"]).optional(),
 });
 

@@ -25,7 +25,13 @@ import {
   summarizeCandidateDirectory,
 } from "@/features/candidates/data";
 import { createCandidateList } from "@/features/candidates/lists";
-import { cleanDirectoryFilters } from "@/features/candidates/origin";
+import { cleanDirectoryFilters, isShortId } from "@/features/candidates/origin";
+import { expandDirectoryRoleAliases, listDirectoryJobRefs } from "@/features/candidates/job-refs";
+import {
+  buildJobShortUrl,
+  buildSavedFilterShortUrl,
+  readableFilterTitle,
+} from "@/features/candidates/short-links";
 import { referCandidate } from "@/features/candidates/referrals/actions";
 import { createApplicationForApi } from "@/features/applications/service";
 import { generateJobMatchesAction } from "@/features/matching/actions";
@@ -211,7 +217,7 @@ const candidatesSearch = defineMcpTool({
   name: "candidates_search",
   title: "Search candidates",
   description:
-    "Search and filter the candidate directory you can see (deduplicated by candidate, most recently active first). Supports multi-job/multi-department filtering (matching ANY in-scope application, not only the latest), applied date bounds (`appliedAfter`/`appliedBefore` or `days`), and `hasResume` (at least one uploaded resume file). Always returns exact counts (`total`, `withResumeCount`, `byJob`) and server-verified clickable Taplot People links (`directoryUrl` and `resumeDirectoryUrl`) that can be shared directly instead of exporting spreadsheets. Use candidates_list_facets or jobs_list first to get valid department names and job IDs. Open one result with candidates_get.",
+    "Search and filter the candidate directory you can see (deduplicated by candidate, most recently active first). Supports multi-job/multi-department filtering (matching ANY in-scope application, not only the latest), applied date bounds (`appliedAfter`/`appliedBefore` or `days`), and `hasResume` (at least one uploaded resume file). Always returns exact counts (`total`, `withResumeCount`, `byJob`), a readable `title` for the filter (use it as link text, e.g. 游戏剧情策划实习 · BOSS · 近14天) and server-verified clickable Taplot People links (`directoryUrl` and `resumeDirectoryUrl`; `shortUrl` / `resumeShortUrl` are the shorter `/c/<job code>` form when the filter is one job that has a short code, otherwise null) that can be shared directly instead of exporting spreadsheets. For a short link of any other filter use candidates_create_list. Use candidates_list_facets or jobs_list first to get valid department names and job IDs. Open one result with candidates_get.",
   group: "candidates",
   scope: "candidates:read",
   permission: "candidates:view",
@@ -231,7 +237,13 @@ const candidatesSearch = defineMcpTool({
     appliedBefore: z.string().trim().max(40).optional().describe("Only candidates who applied on or before this YYYY-MM-DD date or ISO 8601 timestamp."),
     days: z.number().int().min(1).max(365).optional().describe("Convenience window: only candidates who applied within the last N days (1-365). Ignored if appliedAfter is set."),
     hasResume: z.boolean().optional().describe("Set true to include only candidates with at least one uploaded resume file."),
-    listId: z.uuid().optional().describe("Saved shareable list UUID created by candidates_create_list."),
+    listId: z
+      .string()
+      .trim()
+      .max(64)
+      .refine((value) => z.uuid().safeParse(value).success || isShortId(value.toLowerCase()), "Expected a saved list UUID or short id.")
+      .optional()
+      .describe("Saved shareable list UUID or short id (the `/v/<id>` part) created by candidates_create_list."),
     sort: z.enum(["recent", "oldest", "modified", "name"]).default("recent").describe("recent = latest activity first, oldest = oldest application first, modified = last edited first, name = A-Z by last name."),
     limit: limitField,
     offset: offsetField,
@@ -241,7 +253,10 @@ const candidatesSearch = defineMcpTool({
     const offset = input.offset;
     const window = directoryWindow(offset, limit);
     const mergedDepts = Array.from(new Set([...(input.departments ?? []), ...(input.department ? [input.department] : [])]));
-    const mergedRoles = Array.from(new Set([...(input.jobTitles ?? []), ...(input.jobTitle ? [input.jobTitle] : [])]));
+    // A job short code or slug is accepted where a job title is expected.
+    const requestedRoles = Array.from(new Set([...(input.jobTitles ?? []), ...(input.jobTitle ? [input.jobTitle] : [])]));
+    const expandedRole = (await expandDirectoryRoleAliases({ role: requestedRoles })).role;
+    const mergedRoles = Array.isArray(expandedRole) ? expandedRole : expandedRole ? [expandedRole] : [];
     const filters = {
       query: input.query,
       departments: mergedDepts.length > 0 ? mergedDepts : undefined,
@@ -293,10 +308,18 @@ const candidatesSearch = defineMcpTool({
     };
     const directoryUrl = candidatesDirectoryUrl(ctx.appOrigin, urlParams);
     const resumeDirectoryUrl = candidatesDirectoryUrl(ctx.appOrigin, { ...urlParams, hasResume: "1" });
+    // Readable link text for chat messages, and a short `/c/<code>` link when
+    // the filters are one job with a short code plus other simple filters.
+    const jobRefs = await listDirectoryJobRefs();
+    const titleOf = Object.fromEntries(jobRefs.map((job) => [job.id, job.title]));
+    const title = readableFilterTitle(urlParams, { jobTitleById: titleOf });
     return {
       total,
       withResumeCount: summary.withResumeCount,
       byJob: summary.byJob,
+      title,
+      shortUrl: buildJobShortUrl(ctx.appOrigin, urlParams, jobRefs),
+      resumeShortUrl: buildJobShortUrl(ctx.appOrigin, { ...urlParams, hasResume: "1" }, jobRefs),
       directoryUrl,
       resumeDirectoryUrl,
       limit,
@@ -311,7 +334,7 @@ const candidatesCreateList = defineMcpTool({
   name: "candidates_create_list",
   title: "Create shareable candidate list link",
   description:
-    "Create a short, shareable Taplot People `/dashboard/candidates?list=<id>` link for either a structured filter view (mode='filter') or a curated shortlist of specific candidate IDs (mode='snapshot'). Use this when sharing complex multi-job queries or AI-shortlisted candidates in Lark instead of exporting spreadsheets. Returns the verified URL plus exact unique candidate and resume counts.",
+    "Create a short, shareable Taplot People `/dashboard/candidates?list=<id>` link for either a structured filter view (mode='filter') or a curated shortlist of specific candidate IDs (mode='snapshot'). Use this when sharing complex multi-job queries or AI-shortlisted candidates in Lark instead of exporting spreadsheets. Returns the verified URL (`url`), a short link `shortUrl` (`/v/<id>`, use this one in chat) and exact unique candidate and resume counts. Show the link with the returned `title` as its text.",
   group: "candidates",
   scope: "candidates:write",
   permission: "candidates:view",
@@ -377,6 +400,7 @@ const candidatesCreateList = defineMcpTool({
       withResumeCount: summary.withResumeCount,
       byJob: summary.byJob,
       url: candidateListUrl(ctx.appOrigin, created.id),
+      shortUrl: created.shortId ? buildSavedFilterShortUrl(ctx.appOrigin, created.shortId) : null,
     };
   },
 });

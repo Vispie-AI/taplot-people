@@ -518,12 +518,40 @@ export async function generateUniqueJobSlug(
   }
 }
 
+/** A job short code unique in the workspace (case-insensitive); `-2`, `-3`… on a clash. */
+export async function generateUniqueJobShortCode(
+  workspaceId: string,
+  code: string | undefined,
+  currentJobId?: string,
+): Promise<string | null> {
+  if (!code) return null;
+  let suffix = 0;
+  for (;;) {
+    const candidate = suffix === 0 ? code : `${code}-${suffix + 1}`;
+    const [existing] = await db
+      .select({ id: jobs.id })
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.workspaceId, workspaceId),
+          sql`lower(${jobs.shortCode}) = ${candidate}`,
+          isNull(jobs.deletedAt),
+          currentJobId ? ne(jobs.id, currentJobId) : undefined,
+        ),
+      )
+      .limit(1);
+    if (!existing) return candidate;
+    suffix += 1;
+  }
+}
+
 export async function createJob(values: JobFormValues) {
   const { organization: workspace, user } = await getWorkspaceContext();
   const slug = await generateUniqueJobSlug(
     workspace.id,
     values.slug ?? values.title,
   );
+  const shortCode = await generateUniqueJobShortCode(workspace.id, values.shortCode);
 
   const [job] = await db.transaction(async (tx) => {
     const [createdJob] = await tx
@@ -532,6 +560,7 @@ export async function createJob(values: JobFormValues) {
         workspaceId: workspace.id,
         title: values.title,
         slug,
+        shortCode,
         department: values.department,
         sector: values.sector,
         location: values.location,
@@ -592,6 +621,11 @@ export async function updateJob(jobId: string, values: JobFormValues) {
     values.slug ?? values.title,
     jobId,
   );
+  const shortCode = await generateUniqueJobShortCode(
+    workspace.id,
+    values.shortCode,
+    jobId,
+  );
 
   const [job] = await db.transaction(async (tx) => {
     const [updatedJob] = await tx
@@ -599,6 +633,7 @@ export async function updateJob(jobId: string, values: JobFormValues) {
       .set({
         title: values.title,
         slug,
+        shortCode,
         department: values.department,
         sector: values.sector,
         location: values.location,

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { isPublishableJobDescription, jobReadableText } from "@harly/validators";
 
 import { slugify } from "@/lib/utils";
+import { normalizeShortCode } from "@/features/candidates/short-links";
 import {
   DEFAULT_EVALUATION_MODE,
   EVALUATION_MODES,
@@ -49,6 +50,27 @@ const optionalSlug = z.preprocess(
     .transform((value) => (value.length > 0 ? slugify(value) : undefined)),
 );
 
+/** Short code for candidate filter links, e.g. "narr-jr"; blank means none. */
+const optionalShortCode = z.preprocess(
+  (value) => (value == null ? "" : value),
+  z
+    .string()
+    .trim()
+    .transform((value, ctx) => {
+      if (value.length === 0) return undefined;
+      const code = normalizeShortCode(value);
+      if (!code) {
+        ctx.addIssue({
+          code: "custom",
+          message:
+            "Short code: 2-40 letters, digits or hyphens (for example narr-jr).",
+        });
+        return z.NEVER;
+      }
+      return code;
+    }),
+);
+
 const optionalDate = z.preprocess(
   (value) => (value === "" || value == null ? undefined : value),
   z.coerce.date().optional(),
@@ -67,6 +89,7 @@ export const jobFormSchema = z
   .object({
     title: z.string().trim().min(1, "Add a job title to continue."),
     slug: optionalSlug,
+    shortCode: optionalShortCode,
     department: optionalText,
     sector: optionalText,
     location: optionalText,
@@ -223,6 +246,7 @@ export const jobFormSchema = z
     return {
       title: values.title,
       slug: values.slug,
+      shortCode: values.shortCode,
       department: values.department,
       sector: values.sector,
       location: values.location,
