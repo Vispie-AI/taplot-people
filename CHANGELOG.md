@@ -21,6 +21,7 @@ operators. How to cut a release is in [RELEASING.md](RELEASING.md). The
 
 ### Changed
 
+- Resume reviews (screening stage) with no activity for over 90 days no longer count as pending: they leave the review queue, the Home "Candidates to review" / "For you today" counts, and the `candidates_needing_review` MCP tool by default. Nothing is deleted or written: the review queue's "Show older than 3 months" switch (`?queue=review&stale=1`) and the MCP `includeStale` option list them again, and any new activity (re-application, stage move, new resume file, candidate reply) puts the review back in the queue. Interview feedback is unaffected.
 - Upgrade the Taplot People deployment to upstream Harly 0.5.1 while retaining its existing checksum-verified BOSS resume import endpoint. Append the upstream audit migration after the already-applied integration migration.
 
 ### Fixed

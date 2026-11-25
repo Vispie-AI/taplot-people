@@ -48,6 +48,13 @@ export async function ReviewQueueList({ items }: { items: ReviewQueueItem[] }) {
                   {item.job} · {item.stage}
                 </span>
               </span>
+              {item.stale ? (
+                <span className="hidden md:block" title={t("staleHint")}>
+                  <StatusPill tone="neutral" size="sm">
+                    {t("staleBadge")}
+                  </StatusPill>
+                </span>
+              ) : null}
               <span className="hidden sm:block">
                 <StatusPill tone={item.stageKind === "interview" ? "info" : "neutral"} size="sm">
                   {tAction(item.action)}

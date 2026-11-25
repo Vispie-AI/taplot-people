@@ -7,7 +7,18 @@
  * application at its CURRENT stage. Other people's scorecards do not clear it.
  * An interview-stage application with no interview on the books has nothing to
  * give feedback on yet; it needs scheduling instead and is not in the queue.
+ *
+ * Stale resume reviews: a screening-stage (resume review) request whose last
+ * activity is older than `STALE_RESUME_REVIEW_DAYS` is not owed by anyone by
+ * default. It stays pending underneath, so it is reversible: the queue page's
+ * "show older than 3 months" switch lists it again, and any new activity on
+ * the candidate (re-application, stage move, new resume file, inbound reply)
+ * moves its last activity forward and puts it back in the default queue.
+ * Interview feedback is never treated as stale.
  */
+
+/** Resume reviews older than this many days are hidden from the default queue. */
+export const STALE_RESUME_REVIEW_DAYS = 90;
 
 export const REVIEW_STAGE_KINDS = ["screening", "interview"] as const;
 export type ReviewStageKind = (typeof REVIEW_STAGE_KINDS)[number];
@@ -20,6 +31,12 @@ export type ReviewStageRow = {
   kind: ReviewStageKind;
   /** At least one non-canceled interview exists for the application. */
   hasInterview: boolean;
+  /**
+   * Whole days since the latest of: the application entering its stage, the
+   * application date, a new resume file, an inbound candidate message.
+   * Omitted means unknown, which is never stale.
+   */
+  lastActivityAgeDays?: number;
 };
 
 /** A scorecard the current user authored. */
@@ -59,6 +76,15 @@ export function isPendingMyReview(row: ReviewStageRow, mine: ReadonlySet<string>
   return !reviewedByMe(row, mine);
 }
 
+/** A resume review nobody needs to act on by default: no activity for over 90 days. */
+export function isStaleResumeReview(row: ReviewStageRow): boolean {
+  return (
+    row.kind === "screening" &&
+    row.lastActivityAgeDays !== undefined &&
+    row.lastActivityAgeDays > STALE_RESUME_REVIEW_DAYS
+  );
+}
+
 /** Interview stage, but no interview has been scheduled yet. */
 export function needsScheduling(row: ReviewStageRow): boolean {
   return row.kind === "interview" && !row.hasInterview;
@@ -66,6 +92,9 @@ export function needsScheduling(row: ReviewStageRow): boolean {
 
 /** The review queue itself. Candidates open in queue mode from here. */
 export const REVIEW_QUEUE_HREF = "/dashboard/candidates?queue=review";
+
+/** The review queue including resume reviews older than 90 days. */
+export const REVIEW_QUEUE_STALE_HREF = "/dashboard/candidates?queue=review&stale=1";
 
 /** A candidate's application, opened in queue mode. */
 export function reviewApplicationHref(candidateId: string, applicationId: string): string {

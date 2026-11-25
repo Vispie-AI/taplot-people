@@ -6,6 +6,8 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import {
   applicationStageHistory,
   applications,
+  candidateFiles,
+  candidateMessages,
   candidates,
   db,
   effectiveStageKindSql,
@@ -26,6 +28,7 @@ import {
 import {
   indexMyScorecards,
   isPendingMyReview,
+  isStaleResumeReview,
   needsScheduling,
   REVIEW_STAGE_KINDS,
   type ReviewStageKind,
@@ -35,11 +38,15 @@ import {
  * Review queue: the single source of truth for "what do I owe a review on".
  * Home counts, the greeting and the queue page must all read from here.
  *
- *   getReviewQueue(actor, { limit? }) -> { total, waitingOverWeek, items }
+ *   getReviewQueue(actor, { limit?, includeStale? })
+ *     -> { total, waitingOverWeek, staleTotal, items }
  *   getNeedsScheduling(actor, { limit? }) -> { total, items }
  *
- * `total` (and `waitingOverWeek`) always cover the whole result set; `limit`
- * only trims `items`. Items are ordered longest-waiting first, with the
+ * `total` (and `waitingOverWeek`) always cover the whole default queue, which
+ * leaves out resume reviews with no activity for over 90 days (`./rules`
+ * `isStaleResumeReview`); `staleTotal` counts those left out. `includeStale`
+ * lists them in `items` too (flagged `stale`) without changing `total`;
+ * `limit` only trims `items`. Items are ordered longest-waiting first, with the
  * application id as a stable tie-break, so a caller walking the queue
  * (previous / next) gets a deterministic order. The predicate lives in
  * `./rules` (documented there) and is scoped to the actor's job scope and
@@ -62,6 +69,8 @@ export type ReviewQueueItem = {
   action: "interviewFeedback" | "resumeReview";
   /** Days since the application entered its current stage. */
   ageDays: number;
+  /** A resume review with no activity for over 90 days (only with `includeStale`). */
+  stale: boolean;
 };
 
 export type SchedulingItem = {
@@ -74,6 +83,7 @@ export type SchedulingItem = {
 };
 
 type Options = { limit?: number };
+type ReviewOptions = Options & { includeStale?: boolean };
 
 /** Active applications in review-type stages within the actor's scope. */
 const loadReviewStageRows = cache(async (actor: WorkspaceSearchActor) => {
@@ -93,6 +103,14 @@ const loadReviewStageRows = cache(async (actor: WorkspaceSearchActor) => {
         stageKind: effectiveStageKindSql(jobStages),
         appliedAt: applications.appliedAt,
         enteredAt: sql<string | null>`(select max(${applicationStageHistory.createdAt}) from ${applicationStageHistory} where ${applicationStageHistory.applicationId} = ${applications.id} and ${applicationStageHistory.workspaceId} = ${actor.workspaceId})`,
+        // Latest sign of life: stage entry, application date, a new resume file,
+        // or a reply from the candidate. `greatest` skips the nulls.
+        lastActivityAt: sql<string>`greatest(
+          (select max(${applicationStageHistory.createdAt}) from ${applicationStageHistory} where ${applicationStageHistory.applicationId} = ${applications.id} and ${applicationStageHistory.workspaceId} = ${actor.workspaceId}),
+          ${applications.appliedAt},
+          (select max(${candidateFiles.createdAt}) from ${candidateFiles} where ${candidateFiles.candidateId} = ${candidates.id} and ${candidateFiles.workspaceId} = ${actor.workspaceId}),
+          (select max(${candidateMessages.createdAt}) from ${candidateMessages} where ${candidateMessages.candidateId} = ${candidates.id} and ${candidateMessages.workspaceId} = ${actor.workspaceId} and ${candidateMessages.direction} = 'inbound')
+        )`,
         hasInterview: sql<boolean>`exists (select 1 from ${interviews} where ${interviews.applicationId} = ${applications.id} and ${interviews.workspaceId} = ${actor.workspaceId} and ${interviews.status} <> 'canceled')`,
       })
       .from(applications)
@@ -151,6 +169,7 @@ const loadReviewStageRows = cache(async (actor: WorkspaceSearchActor) => {
       kind: r.stageKind as ReviewStageKind,
       name: `${r.first} ${r.last}`,
       ageDays: daysSince(r.enteredAt ?? r.appliedAt),
+      lastActivityAgeDays: daysSince(r.lastActivityAt),
     })),
     mine: indexMyScorecards(mine),
     gravatarEnabled,
@@ -164,14 +183,25 @@ const oldestFirst = (
 
 export async function getReviewQueue(
   actor: WorkspaceSearchActor,
-  { limit }: Options = {},
-): Promise<{ total: number; waitingOverWeek: number; items: ReviewQueueItem[] }> {
+  { limit, includeStale = false }: ReviewOptions = {},
+): Promise<{ total: number; waitingOverWeek: number; staleTotal: number; items: ReviewQueueItem[] }> {
   if (!actorHasPermission(actor, "candidates:view")) {
-    return { total: 0, waitingOverWeek: 0, items: [] };
+    return { total: 0, waitingOverWeek: 0, staleTotal: 0, items: [] };
   }
   const { rows, mine, gravatarEnabled } = await loadReviewStageRows(actor);
 
-  const pending = rows
+  const pendingAll = rows
+    .map((r) => ({
+      ...r,
+      stale: isStaleResumeReview({
+        applicationId: r.applicationId,
+        stageId: r.stageId,
+        stageName: r.stageName,
+        kind: r.kind,
+        hasInterview: r.hasInterview,
+        lastActivityAgeDays: r.lastActivityAgeDays,
+      }),
+    }))
     .filter((r) =>
       isPendingMyReview(
         {
@@ -185,8 +215,10 @@ export async function getReviewQueue(
       ),
     )
     .sort(oldestFirst);
+  const pending = pendingAll.filter((r) => !r.stale);
+  const listed = includeStale ? pendingAll : pending;
 
-  const items: ReviewQueueItem[] = pending.slice(0, limit).map((r) => ({
+  const items: ReviewQueueItem[] = listed.slice(0, limit).map((r) => ({
     applicationId: r.applicationId,
     candidateId: r.candidateId,
     name: r.name,
@@ -197,11 +229,13 @@ export async function getReviewQueue(
     stageKind: r.kind,
     action: r.kind === "interview" ? "interviewFeedback" : "resumeReview",
     ageDays: r.ageDays,
+    stale: r.stale,
   }));
 
   return {
     total: pending.length,
     waitingOverWeek: pending.filter((r) => r.ageDays > WAITING_OVER_WEEK_DAYS).length,
+    staleTotal: pendingAll.length - pending.length,
     items,
   };
 }

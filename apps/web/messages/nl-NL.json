@@ -296,7 +296,8 @@
       "empty": "Geen beoordelingen in afwachting. Je team is bij.",
       "more": "{count, plural, one {# meer in je lijst} other {# meer in je lijst}}",
       "interviewFeedback": "Feedback op gesprek",
-      "resumeReview": "Cv-beoordeling"
+      "resumeReview": "Cv-beoordeling",
+      "staleHidden": "{count, plural, one {# ouder dan 3 maanden verborgen} other {# ouder dan 3 maanden verborgen}}"
     },
     "forYouToday": {
       "title": "Vandaag voor jou",
@@ -1863,6 +1864,10 @@
       "allCandidates": "Alle kandidaten",
       "queueDone": "{count, plural, one {Je bent aan het einde van de wachtrij. # sollicitatie wacht nog op je beoordeling.} other {Je bent aan het einde van de wachtrij. # sollicitaties wachten nog op je beoordeling.}}",
       "queueLimitHint": "De {shown} langst wachtende worden getoond. Begin met beoordelen om alle {total} langs te gaan.",
+      "staleNote": "{count, plural, =0 {Er zijn geen cv-beoordelingen verborgen.} one {# cv-beoordeling ouder dan 3 maanden is verborgen (al meer dan 90 dagen geen activiteit).} other {# cv-beoordelingen ouder dan 3 maanden zijn verborgen (al meer dan 90 dagen geen activiteit).}}",
+      "staleShown": "{count, plural, =0 {Geen cv-beoordelingen ouder dan 3 maanden.} one {Inclusief # cv-beoordeling ouder dan 3 maanden (al meer dan 90 dagen geen activiteit).} other {Inclusief # cv-beoordelingen ouder dan 3 maanden (al meer dan 90 dagen geen activiteit).}}",
+      "staleShow": "Toon ouder dan 3 maanden",
+      "staleHide": "Verberg ouder dan 3 maanden",
       "deletedAt": "Verwijderd {date}",
       "trashEmpty": "De prullenbak is leeg",
       "trashEmptyDescription": "Verwijderde kandidaten verschijnen hier en kunnen worden hersteld.",
@@ -7506,6 +7511,8 @@
       "reviewQueueList": {
         "queueLabel": "Beoordelingswachtrij",
         "waitingInStage": "Wacht in deze fase",
+        "staleBadge": "Verlopen · geen beoordeling nodig",
+        "staleHint": "Automatisch verlopen: cv-beoordeling zonder activiteit gedurende meer dan 90 dagen",
         "waitingToday": "Vandaag",
         "waitingDays": "{count, plural, one {# dag} other {# dagen}}"
       }

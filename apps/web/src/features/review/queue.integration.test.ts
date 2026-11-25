@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 
-import { applications, candidates, db, scorecards } from "@harly/db";
+import { applications, candidateFiles, candidates, db, scorecards } from "@harly/db";
 
 import {
   createAuthorizationFixture,
@@ -31,6 +31,8 @@ import { getNeedsScheduling, getReviewQueue } from "./queue";
 describe.skipIf(!runPipelineIntegration)("review queue (database)", () => {
   let fx: AuthorizationFixture;
   let interviewCandidate: string;
+  let staleCandidate: string;
+  let staleApplication: string;
 
   async function actor(key: ActorKey) {
     ctx.workspaceId = fx.workspaceId;
@@ -59,6 +61,28 @@ describe.skipIf(!runPipelineIntegration)("review queue (database)", () => {
       jobId: fx.jobA,
       currentStageId: fx.stagesA.interview!.id,
     });
+    // A resume review that has waited 200 days with no other activity.
+    const [old] = await db
+      .insert(candidates)
+      .values({
+        workspaceId: fx.workspaceId,
+        firstName: "Queue",
+        lastName: "Stale",
+        email: "queue-stale@example.test",
+      })
+      .returning({ id: candidates.id });
+    staleCandidate = old!.id;
+    const [oldApp] = await db
+      .insert(applications)
+      .values({
+        workspaceId: fx.workspaceId,
+        candidateId: staleCandidate,
+        jobId: fx.jobA,
+        currentStageId: fx.stagesA.screening!.id,
+        appliedAt: new Date(Date.now() - 200 * 86_400_000),
+      })
+      .returning({ id: applications.id });
+    staleApplication = oldApp!.id;
   });
 
   afterAll(async () => {
@@ -67,7 +91,7 @@ describe.skipIf(!runPipelineIntegration)("review queue (database)", () => {
 
   it("returns nothing without candidates:view", async () => {
     const none = await actor("none");
-    expect(await getReviewQueue(none)).toEqual({ total: 0, waitingOverWeek: 0, items: [] });
+    expect(await getReviewQueue(none)).toEqual({ total: 0, waitingOverWeek: 0, staleTotal: 0, items: [] });
     expect(await getNeedsScheduling(none)).toEqual({ total: 0, items: [] });
   });
 
@@ -124,5 +148,32 @@ describe.skipIf(!runPipelineIntegration)("review queue (database)", () => {
     // Someone else's scorecard does not clear it for them.
     const other = await getReviewQueue(await actor("scoped"));
     expect(other.items.map((item) => item.applicationId)).toContain(app!.id);
+  });
+
+  it("leaves resume reviews with no activity for over 90 days out of the default queue and the total", async () => {
+    const full = await actor("full");
+    const queue = await getReviewQueue(full);
+    expect(queue.items.map((item) => item.applicationId)).not.toContain(staleApplication);
+    expect(queue.total).toBe(queue.items.length);
+    expect(queue.staleTotal).toBeGreaterThanOrEqual(1);
+
+    // Reversible: the switch lists it again, flagged, without changing the total.
+    const withStale = await getReviewQueue(await actor("full"), { includeStale: true });
+    const staleItem = withStale.items.find((item) => item.applicationId === staleApplication);
+    expect(staleItem?.stale).toBe(true);
+    expect(staleItem?.ageDays).toBeGreaterThan(90);
+    expect(withStale.total).toBe(queue.total);
+    expect(withStale.items).toHaveLength(queue.total + queue.staleTotal);
+  });
+
+  it("puts a stale resume review back in the queue after a new resume arrives", async () => {
+    await db.insert(candidateFiles).values({
+      workspaceId: fx.workspaceId,
+      candidateId: staleCandidate,
+      fileName: "new-resume.pdf",
+      fileUrl: "resumes/new-resume.pdf",
+    });
+    const queue = await getReviewQueue(await actor("full"));
+    expect(queue.items.map((item) => item.applicationId)).toContain(staleApplication);
   });
 });

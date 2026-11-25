@@ -683,18 +683,22 @@ const candidatesNeedingReview = defineMcpTool({
   name: "candidates_needing_review",
   title: "Candidates waiting for my review",
   description:
-    "Your review queue: active applications sitting in screening or interview stages where you still owe a resume review or interview feedback, longest-waiting first. Returns total, how many wait over a week and the items with application id, candidate, job, stage, the action needed and days waiting. Open an item with candidates_get or applications_get.",
+    "Your review queue: active applications sitting in screening or interview stages where you still owe a resume review or interview feedback, longest-waiting first. Returns total, how many wait over a week and the items with application id, candidate, job, stage, the action needed and days waiting. Resume reviews with no activity for over 90 days are left out by default (staleExcluded counts them); set includeStale to list them too. Open an item with candidates_get or applications_get.",
   group: "candidates",
   scope: "candidates:read",
   permission: "candidates:view",
   annotations: READ,
-  input: z.object({ limit: z.number().int().min(1).max(100).default(25).describe("Maximum items to return, 1-100.") }),
+  input: z.object({
+    limit: z.number().int().min(1).max(100).default(25).describe("Maximum items to return, 1-100."),
+    includeStale: z.boolean().default(false).describe("Also list resume reviews with no activity for over 90 days."),
+  }),
   async run(input, ctx) {
     const actor = await guard(() => resolveSearchActor());
-    const queue = await guard(() => getReviewQueue(actor, { limit: clampLimit(input.limit) }));
+    const queue = await guard(() => getReviewQueue(actor, { limit: clampLimit(input.limit), includeStale: input.includeStale }));
     return {
       total: queue.total,
       waitingOverWeek: queue.waitingOverWeek,
+      staleExcluded: queue.staleTotal,
       items: queue.items.map((item) => ({
         applicationId: item.applicationId,
         candidateId: item.candidateId,
@@ -704,6 +708,7 @@ const candidatesNeedingReview = defineMcpTool({
         stageKind: item.stageKind,
         action: item.action,
         waitingDays: item.ageDays,
+        stale: item.stale,
         url: candidateUrl(ctx.appOrigin, item.candidateId, item.applicationId),
       })),
     };
