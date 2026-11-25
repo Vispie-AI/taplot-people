@@ -58,7 +58,7 @@ describe("candidates directory page: trash for job-limited roles", () => {
     mocks.listEmailTemplates.mockResolvedValue([]);
     mocks.listJobOptions.mockResolvedValue([]);
     mocks.listWorkspaceMembers.mockResolvedValue([]);
-    mocks.getReviewQueue.mockResolvedValue({ total: 0, waitingOverWeek: 0, items: [] });
+    mocks.getReviewQueue.mockResolvedValue({ total: 0, waitingOverWeek: 0, staleTotal: 0, items: [] });
   });
 
   it("does not load trashed candidates for a role limited to specific jobs", async () => {

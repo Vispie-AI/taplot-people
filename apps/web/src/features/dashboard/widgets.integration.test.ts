@@ -110,6 +110,7 @@ describe.skipIf(!runPipelineIntegration)("dashboard widgets: permission and scop
     await expect(getCandidatesNeedingReview()).resolves.toEqual({
       total: 0,
       waitingOverWeek: 0,
+      staleTotal: 0,
       items: [],
     });
 
