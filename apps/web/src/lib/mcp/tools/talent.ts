@@ -84,9 +84,14 @@ const talentSearch = defineMcpTool({
     });
     return {
       ...result,
-      candidates: result.candidates.map(({ evidence, ...rest }) =>
-        evidence ? { ...rest, untrusted_text: { evidence } } : rest,
-      ),
+      candidates: result.candidates.map(({ evidence, matches, ...rest }) => ({
+        ...rest,
+        matches: matches.map(({ evidence: quotes, reason, ...match }) => ({
+          ...match,
+          untrusted_text: { reason, evidence: quotes },
+        })),
+        ...(evidence ? { untrusted_text: { evidence } } : {}),
+      })),
     };
   },
 });
