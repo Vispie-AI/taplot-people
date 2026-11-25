@@ -15,6 +15,8 @@ operators. How to cut a release is in [RELEASING.md](RELEASING.md). The
 
 ### Added
 
+- Talent profiles: structured tags on each candidate (skills, roles, companies, key companies, industries, works, city, years of experience, education, source channels, first contact and last active) with a verbatim evidence quote behind every tag, plus per-posting match scores. New API scopes `talent:read` and `talent:write`; endpoints `PUT`/`GET`/`DELETE /api/v1/candidates/{id}/talent-profile`, `GET /api/v1/talent/search` (keywords, tag filters, time ranges, posting score, not yet contacted) and `GET /api/v1/talent/stats` (per-posting pool, sources, weekly new, key-company coverage); `GET /api/v1/talent/candidates` and `GET /api/v1/candidates/{id}/talent-input` give a tagging service the candidates to tag and their resume text (secret keys with `talent:write` only); MCP tools `talent_search`, `talent_get_profile` and `talent_stats` within the caller's role scope, each result with its candidate link. Every write is recorded in the audit log. Run the new migration before starting this version.
+
 - Operators can opt in to automatic Harly Administrator enrollment on the first verified Lark sign-in. Existing workspace roles and the default authentication mode remain available.
 
 - Optional Lark staff sign-in with enterprise identity and existing membership checks, plus a server-enforced Lark-only mode that preserves existing accounts and invitation roles. Candidate portal login and API keys remain independent.

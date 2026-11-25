@@ -50,6 +50,7 @@ workspace.
 | Scorecards | Create, read | `scorecards:read`, `scorecards:write` |
 | Tasks | List, create, update | `tasks:read`, `tasks:write` |
 | Talent pool | List, create, assign | `pool:read`, `pool:write` |
+| Talent profiles | Write structured tags with evidence, search, pool statistics | `talent:read`, `talent:write` |
 | Activity events | Read timeline | `activity:read` |
 | Stages | List, create, update, reorder, archive, delete pipeline stages | `stages:read`, `stages:write` |
 | Webhooks | CRUD endpoints, view deliveries, replay | `webhooks:read`, `webhooks:write` |
@@ -192,6 +193,62 @@ curl --fail-with-body -X POST \
 
 Stage endpoints use the `stages:read` and `stages:write` scopes.
 
+## Talent profiles
+
+A talent profile is a set of structured tags written by a tagging service you
+run: skills, roles, companies, key companies, industries, works, city, years of
+experience, education and source channels, plus a match score from 0 to 10 for
+each posting you define. Every tag value needs an `evidence` entry with the same
+`field` and `value` and a short verbatim `quote` from the candidate's own text,
+and every match scoring 5 or more needs at least one quote; otherwise the write
+fails with `422` and lists the tags without evidence. Age, birth date and other
+protected traits are not part of the profile. A `PUT` replaces the whole profile
+and its matches, needs a secret key with `talent:write`, and is recorded in the
+audit log.
+
+```bash
+curl --fail-with-body -X PUT \
+  'https://hiring.example.com/api/v1/candidates/CANDIDATE_ID/talent-profile' \
+  -H 'Authorization: Bearer harly_sk_live_YOUR_KEY' \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "tagVersion": "v1",
+    "engine": "my-tagger",
+    "skills": ["Unity"],
+    "works": [{ "kind": "游戏作品", "title": "Puzzle Garden" }],
+    "evidence": [
+      { "field": "skills", "value": "Unity", "quote": "Built levels in Unity" },
+      { "field": "works", "value": "Puzzle Garden", "quote": "Shipped Puzzle Garden" }
+    ],
+    "matches": [
+      { "postingKey": "casual_game", "score": 8, "evidence": [{ "quote": "Shipped Puzzle Garden" }] }
+    ]
+  }'
+```
+
+`GET /api/v1/talent/search` filters profiles with `talent:read`. List filters
+take comma-separated values; `posting` with `minScore` sorts by that posting's
+score, and `contacted=false` keeps candidates nobody has interviewed, emailed
+from Harly or moved to an interview, offer or hired stage. Each result carries
+the candidate's `url`.
+
+```bash
+curl --fail-with-body \
+  -H 'Authorization: Bearer harly_sk_live_YOUR_KEY' \
+  'https://hiring.example.com/api/v1/talent/search?posting=casual_game&minScore=7&contacted=false&limit=20'
+```
+
+A tagging service pages through `GET /api/v1/talent/candidates` (`untagged=true`
+keeps candidates without a profile) and reads each candidate's headline,
+summary, application sources and dates and newest resume text from
+`GET /api/v1/candidates/{id}/talent-input`. Its `inputHash` lets the service
+skip candidates whose input has not changed since the last profile. Both need
+a secret key with `talent:write`.
+
+`GET /api/v1/talent/stats` returns, per posting, how many candidates score 5+
+and 7+ and how many 7+ have not been contacted, plus source channels, new
+candidates per week and key-company coverage.
+
 ## All scopes
 
 ```text
@@ -204,6 +261,7 @@ scorecards:read    scorecards:write
 tasks:read         tasks:write
 notes:read         notes:write
 tags:read          tags:write
+talent:read        talent:write
 stages:read        stages:write
 activity:read
 pool:read          pool:write
