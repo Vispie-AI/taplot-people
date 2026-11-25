@@ -11,6 +11,7 @@ import { activityEventsContracts } from "./activity-events";
 import { poolEntriesContracts } from "./pool-entries";
 import { meContracts } from "./me";
 import { importBossResumeContract } from "./boss-resumes";
+import { syncInterviewBookingResumeContract } from "./interview-booking";
 import type { RouteDefinition } from "./types";
 
 export const apiContracts: RouteDefinition[] = [
@@ -27,4 +28,5 @@ export const apiContracts: RouteDefinition[] = [
   ...poolEntriesContracts,
   ...meContracts,
   importBossResumeContract,
+  syncInterviewBookingResumeContract,
 ];
