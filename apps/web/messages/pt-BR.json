@@ -296,7 +296,8 @@
       "empty": "Nenhuma revisão pendente. Sua equipe está em dia.",
       "more": "{count, plural, one {# a mais na sua fila} other {# a mais na sua fila}}",
       "interviewFeedback": "Feedback da entrevista",
-      "resumeReview": "Revisão de currículo"
+      "resumeReview": "Revisão de currículo",
+      "staleHidden": "{count, plural, one {# com mais de 3 meses oculta} other {# com mais de 3 meses ocultas}}"
     },
     "forYouToday": {
       "title": "Para você hoje",
@@ -1863,6 +1864,10 @@
       "allCandidates": "Todos os candidatos",
       "queueDone": "{count, plural, one {Você chegou ao fim da fila. # candidatura ainda aguarda sua avaliação.} other {Você chegou ao fim da fila. # candidaturas ainda aguardam sua avaliação.}}",
       "queueLimitHint": "Mostrando as {shown} candidaturas que esperam há mais tempo. Comece a revisar para percorrer todas as {total}.",
+      "staleNote": "{count, plural, =0 {Nenhuma revisão de currículo oculta.} one {# revisão de currículo com mais de 3 meses está oculta (sem atividade há mais de 90 dias).} other {# revisões de currículo com mais de 3 meses estão ocultas (sem atividade há mais de 90 dias).}}",
+      "staleShown": "{count, plural, =0 {Nenhuma revisão de currículo com mais de 3 meses.} one {Inclui # revisão de currículo com mais de 3 meses (sem atividade há mais de 90 dias).} other {Inclui # revisões de currículo com mais de 3 meses (sem atividade há mais de 90 dias).}}",
+      "staleShow": "Mostrar as de mais de 3 meses",
+      "staleHide": "Ocultar as de mais de 3 meses",
       "deletedAt": "Excluído {date}",
       "trashEmpty": "A lixeira está vazia",
       "trashEmptyDescription": "Candidatos excluídos aparecem aqui e podem ser restaurados.",
@@ -7506,6 +7511,8 @@
       "reviewQueueList": {
         "queueLabel": "Fila de revisão",
         "waitingInStage": "Aguardando nesta etapa",
+        "staleBadge": "Expirada · sem necessidade de revisão",
+        "staleHint": "Expirada automaticamente: revisão de currículo sem atividade há mais de 90 dias",
         "waitingToday": "Hoje",
         "waitingDays": "{count, plural, one {# dia} other {# dias}}"
       }

@@ -296,7 +296,8 @@
       "empty": "Keine Prüfungen ausstehend. Dein Team ist auf dem Laufenden.",
       "more": "{count, plural, one {# weiterer in deiner Liste} other {# weitere in deiner Liste}}",
       "interviewFeedback": "Feedback zum Gespräch",
-      "resumeReview": "Lebenslauf prüfen"
+      "resumeReview": "Lebenslauf prüfen",
+      "staleHidden": "{count, plural, one {# älter als 3 Monate ausgeblendet} other {# älter als 3 Monate ausgeblendet}}"
     },
     "forYouToday": {
       "title": "Heute für Sie",
@@ -1863,6 +1864,10 @@
       "allCandidates": "Alle Kandidat:innen",
       "queueDone": "{count, plural, one {Du bist am Ende der Warteschlange angekommen. # Bewerbung wartet noch auf deine Prüfung.} other {Du bist am Ende der Warteschlange angekommen. # Bewerbungen warten noch auf deine Prüfung.}}",
       "queueLimitHint": "Die {shown} am längsten wartenden werden angezeigt. Starte die Prüfung, um alle {total} durchzugehen.",
+      "staleNote": "{count, plural, =0 {Keine Lebenslauf-Prüfungen ausgeblendet.} one {# Lebenslauf-Prüfung älter als 3 Monate ist ausgeblendet (über 90 Tage ohne Aktivität).} other {# Lebenslauf-Prüfungen älter als 3 Monate sind ausgeblendet (über 90 Tage ohne Aktivität).}}",
+      "staleShown": "{count, plural, =0 {Keine Lebenslauf-Prüfungen älter als 3 Monate.} one {Inklusive # Lebenslauf-Prüfung älter als 3 Monate (über 90 Tage ohne Aktivität).} other {Inklusive # Lebenslauf-Prüfungen älter als 3 Monate (über 90 Tage ohne Aktivität).}}",
+      "staleShow": "Älter als 3 Monate anzeigen",
+      "staleHide": "Älter als 3 Monate ausblenden",
       "deletedAt": "Gelöscht {date}",
       "trashEmpty": "Der Papierkorb ist leer",
       "trashEmptyDescription": "Gelöschte Kandidat:innen erscheinen hier und können wiederhergestellt werden.",
@@ -7506,6 +7511,8 @@
       "reviewQueueList": {
         "queueLabel": "Prüfwarteschlange",
         "waitingInStage": "Wartet in dieser Phase",
+        "staleBadge": "Abgelaufen · keine Prüfung nötig",
+        "staleHint": "Automatisch abgelaufen: Lebenslauf-Prüfung ohne Aktivität seit über 90 Tagen",
         "waitingToday": "Heute",
         "waitingDays": "{count, plural, one {# Tag} other {# Tage}}"
       }

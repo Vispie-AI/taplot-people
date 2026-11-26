@@ -296,7 +296,8 @@
       "empty": "No reviews pending. Your team is on top of feedback.",
       "more": "{count, plural, one {# more in your queue} other {# more in your queue}}",
       "interviewFeedback": "Interview feedback",
-      "resumeReview": "Resume review"
+      "resumeReview": "Resume review",
+      "staleHidden": "{count, plural, one {# older than 3 months hidden} other {# older than 3 months hidden}}"
     },
     "forYouToday": {
       "title": "For you today",
@@ -1863,6 +1864,10 @@
       "allCandidates": "All candidates",
       "queueDone": "{count, plural, one {You reached the end of the queue. # application still waits on your review.} other {You reached the end of the queue. # applications still wait on your review.}}",
       "queueLimitHint": "Showing the {shown} longest-waiting. Start reviewing to walk all {total}.",
+      "staleNote": "{count, plural, =0 {No resume reviews are hidden.} one {# resume review older than 3 months is hidden (no activity for over 90 days).} other {# resume reviews older than 3 months are hidden (no activity for over 90 days).}}",
+      "staleShown": "{count, plural, =0 {No resume reviews older than 3 months.} one {Including # resume review older than 3 months (no activity for over 90 days).} other {Including # resume reviews older than 3 months (no activity for over 90 days).}}",
+      "staleShow": "Show older than 3 months",
+      "staleHide": "Hide older than 3 months",
       "deletedAt": "Deleted {date}",
       "trashEmpty": "Trash is empty",
       "trashEmptyDescription": "Candidates you delete show up here and can be restored.",
@@ -7506,6 +7511,8 @@
       "reviewQueueList": {
         "queueLabel": "Review queue",
         "waitingInStage": "Waiting in this stage",
+        "staleBadge": "Expired · no review needed",
+        "staleHint": "Auto-expired: resume review with no activity for over 90 days",
         "waitingToday": "Today",
         "waitingDays": "{count, plural, one {# day} other {# days}}"
       }

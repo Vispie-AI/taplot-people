@@ -33,6 +33,7 @@ import { listWorkspaceMembers } from "@/features/jobs/hiring-team-data";
 import { isUnrestrictedScope } from "@/features/search/scope";
 import { resolveSearchActor } from "@/features/search/workspace-search";
 import { getReviewQueue } from "@/features/review/queue";
+import { REVIEW_QUEUE_HREF, REVIEW_QUEUE_STALE_HREF } from "@/features/review/rules";
 import { ReviewQueueList } from "@/features/review/ReviewQueueList";
 import {
   candidateHref,
@@ -77,6 +78,8 @@ type CandidatesPageProps = {
     queue?: string;
     /** Set by auto-advance after the last queue item. */
     done?: string;
+    /** `1` with `queue=review`: also list resume reviews older than 90 days. */
+    stale?: string;
   }>;
 };
 
@@ -87,6 +90,7 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
   const rawParams = await searchParams;
   const { view, import: importSource, page: pageRaw, queue, done } = rawParams;
   const isQueue = queue === "review";
+  const showStale = isQueue && rawParams.stale === "1";
   const isTrash = !isQueue && view === "trash";
   const initialImportSource: ImportSource | undefined =
     importSource === "csv" ||
@@ -134,7 +138,7 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
       ? getCandidateList(workspaceContext.organization.id, mappedFilters.listId)
       : Promise.resolve(null),
     // The same source Home counts, so "Review queue · N" matches it.
-    resolveSearchActor().then((actor) => getReviewQueue(actor)),
+    resolveSearchActor().then((actor) => getReviewQueue(actor, { includeStale: showStale })),
     // The trash is not filtered by job scope, so a role limited to specific jobs
     // does not load it (its names and emails cannot be scoped per candidate here).
     isUnrestrictedScope(policy.scope) ? listTrashedCandidates() : Promise.resolve([]),
@@ -179,7 +183,9 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
 
   const QUEUE_LIST_LIMIT = 100;
   const queueItems = reviewQueue.items.slice(0, QUEUE_LIST_LIMIT);
-  const firstQueueItem = reviewQueue.items[0] ?? null;
+  // "Start reviewing" walks the default queue, so it never opens a stale item.
+  const firstQueueItem = reviewQueue.items.find((item) => !item.stale) ?? null;
+  const queueListedTotal = showStale ? reviewQueue.total + reviewQueue.staleTotal : reviewQueue.total;
 
   const importJobsProp = jobOptions.map((job) => ({ id: job.id, title: job.title }));
   const jobNamesById = Object.fromEntries(jobOptions.map((job) => [job.id, job.title]));
@@ -239,8 +245,20 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
         ]}
       />
 
+      {isQueue && (reviewQueue.staleTotal > 0 || showStale) ? (
+        <p className="flex flex-wrap items-center gap-x-2 text-[13px] text-soft-ink">
+          <span>{showStale ? t("staleShown", { count: reviewQueue.staleTotal }) : t("staleNote", { count: reviewQueue.staleTotal })}</span>
+          <Link
+            href={(showStale ? REVIEW_QUEUE_HREF : REVIEW_QUEUE_STALE_HREF) as Route}
+            className="font-medium text-near-ink underline-offset-4 hover:underline"
+          >
+            {showStale ? t("staleHide") : t("staleShow")}
+          </Link>
+        </p>
+      ) : null}
+
       {isQueue ? (
-        reviewQueue.total === 0 ? (
+        queueListedTotal === 0 ? (
           <EmptyState
             icon={CheckCircle2}
             title={t("queueCleared")}
@@ -270,7 +288,7 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
             <ReviewQueueList items={queueItems} />
             {reviewQueue.items.length > queueItems.length ? (
               <p className="text-center text-[13px] text-soft-ink">
-                {t("queueLimitHint", { shown: queueItems.length, total: reviewQueue.total })}
+                {t("queueLimitHint", { shown: queueItems.length, total: queueListedTotal })}
               </p>
             ) : null}
           </div>

@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   indexMyScorecards,
   isPendingMyReview,
+  isStaleResumeReview,
   needsScheduling,
+  STALE_RESUME_REVIEW_DAYS,
   reviewApplicationHref,
   type ReviewStageRow,
 } from "./rules";
@@ -60,6 +62,31 @@ describe("isPendingMyReview", () => {
     const interview = row({ kind: "interview", stageName: "Interview" });
     expect(isPendingMyReview(interview, indexMyScorecards([]))).toBe(false);
     expect(isPendingMyReview({ ...interview, hasInterview: true }, indexMyScorecards([]))).toBe(true);
+  });
+});
+
+describe("isStaleResumeReview", () => {
+  it("is stale only after more than 90 days without activity", () => {
+    expect(STALE_RESUME_REVIEW_DAYS).toBe(90);
+    expect(isStaleResumeReview(row({ lastActivityAgeDays: 90 }))).toBe(false);
+    expect(isStaleResumeReview(row({ lastActivityAgeDays: 91 }))).toBe(true);
+    expect(isStaleResumeReview(row({ lastActivityAgeDays: 364 }))).toBe(true);
+  });
+
+  it("is never stale when the activity age is unknown or recent", () => {
+    expect(isStaleResumeReview(row())).toBe(false);
+    expect(isStaleResumeReview(row({ lastActivityAgeDays: 0 }))).toBe(false);
+  });
+
+  it("never expires interview feedback", () => {
+    expect(
+      isStaleResumeReview(row({ kind: "interview", hasInterview: true, lastActivityAgeDays: 400 })),
+    ).toBe(false);
+  });
+
+  it("does not change whether the review is pending: it stays reachable underneath", () => {
+    const old = row({ lastActivityAgeDays: 300 });
+    expect(isPendingMyReview(old, indexMyScorecards([]))).toBe(true);
   });
 });
 

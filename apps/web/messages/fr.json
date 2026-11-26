@@ -296,7 +296,8 @@
       "empty": "Aucun examen en attente. Votre équipe est à jour.",
       "more": "{count, plural, one {# autre dans votre file} other {# autres dans votre file}}",
       "interviewFeedback": "Retour sur l’entretien",
-      "resumeReview": "Examen du CV"
+      "resumeReview": "Examen du CV",
+      "staleHidden": "{count, plural, one {# de plus de 3 mois masquée} other {# de plus de 3 mois masquées}}"
     },
     "forYouToday": {
       "title": "Pour vous aujourd’hui",
@@ -1863,6 +1864,10 @@
       "allCandidates": "Toutes les candidatures",
       "queueDone": "{count, plural, one {Vous êtes au bout de la file. # candidature attend encore votre révision.} other {Vous êtes au bout de la file. # candidatures attendent encore votre révision.}}",
       "queueLimitHint": "Affichage des {shown} attentes les plus longues. Commencez la révision pour parcourir les {total}.",
+      "staleNote": "{count, plural, =0 {Aucune revue de CV masquée.} one {# revue de CV de plus de 3 mois est masquée (aucune activité depuis plus de 90 jours).} other {# revues de CV de plus de 3 mois sont masquées (aucune activité depuis plus de 90 jours).}}",
+      "staleShown": "{count, plural, =0 {Aucune revue de CV de plus de 3 mois.} one {Inclut # revue de CV de plus de 3 mois (aucune activité depuis plus de 90 jours).} other {Inclut # revues de CV de plus de 3 mois (aucune activité depuis plus de 90 jours).}}",
+      "staleShow": "Afficher les plus de 3 mois",
+      "staleHide": "Masquer les plus de 3 mois",
       "deletedAt": "Supprimé {date}",
       "trashEmpty": "La corbeille est vide",
       "trashEmptyDescription": "Les candidatures supprimées apparaissent ici et peuvent être restaurées.",
@@ -7506,6 +7511,8 @@
       "reviewQueueList": {
         "queueLabel": "File de relecture",
         "waitingInStage": "En attente dans cette étape",
+        "staleBadge": "Expirée · aucune revue requise",
+        "staleHint": "Expirée automatiquement : revue de CV sans activité depuis plus de 90 jours",
         "waitingToday": "Aujourd’hui",
         "waitingDays": "{count, plural, one {# jour} other {# jours}}"
       }

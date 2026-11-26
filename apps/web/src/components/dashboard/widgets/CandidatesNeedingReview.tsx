@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { cn } from "@/lib/utils";
 import type { ReviewCandidates } from "@/features/dashboard/widgets";
-import { REVIEW_QUEUE_HREF, reviewApplicationHref } from "@/features/review/rules";
+import { REVIEW_QUEUE_HREF, REVIEW_QUEUE_STALE_HREF, reviewApplicationHref } from "@/features/review/rules";
 import { stageLabel } from "@/features/pipeline/stage-label";
 import { Tile, TileHeader, TileLink, EmptyHint } from "./primitives";
 
@@ -92,6 +92,14 @@ export function CandidatesNeedingReview({
             className="mx-3 mt-1 rounded-[var(--radius-md)] px-3 py-2.5 text-center text-xs font-medium text-soft-ink transition hover:bg-row-wash"
           >
             {t("more", { count: review.total - review.items.length })}
+          </Link>
+        ) : null}
+        {review.staleTotal > 0 ? (
+          <Link
+            href={REVIEW_QUEUE_STALE_HREF as Route}
+            className="mx-3 mt-1 rounded-[var(--radius-md)] px-3 py-2.5 text-center text-xs text-soft-ink transition hover:bg-row-wash"
+          >
+            {t("staleHidden", { count: review.staleTotal })}
           </Link>
         ) : null}
       </div>

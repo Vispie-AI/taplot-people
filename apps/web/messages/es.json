@@ -296,7 +296,8 @@
       "empty": "No hay revisiones pendientes. Tu equipo está al día.",
       "more": "{count, plural, one {# más en tu cola} other {# más en tu cola}}",
       "interviewFeedback": "Comentarios de la entrevista",
-      "resumeReview": "Revisión del CV"
+      "resumeReview": "Revisión del CV",
+      "staleHidden": "{count, plural, one {# de más de 3 meses oculta} other {# de más de 3 meses ocultas}}"
     },
     "forYouToday": {
       "title": "Para ti hoy",
@@ -1863,6 +1864,10 @@
       "allCandidates": "Todos los candidatos",
       "queueDone": "{count, plural, one {Llegaste al final de la cola. # solicitud todavía espera tu revisión.} other {Llegaste al final de la cola. # solicitudes todavía esperan tu revisión.}}",
       "queueLimitHint": "Se muestran las {shown} solicitudes que llevan más tiempo esperando. Empieza a revisar para recorrer las {total}.",
+      "staleNote": "{count, plural, =0 {No hay revisiones de CV ocultas.} one {# revisión de CV de más de 3 meses está oculta (sin actividad en más de 90 días).} other {# revisiones de CV de más de 3 meses están ocultas (sin actividad en más de 90 días).}}",
+      "staleShown": "{count, plural, =0 {No hay revisiones de CV de más de 3 meses.} one {Incluye # revisión de CV de más de 3 meses (sin actividad en más de 90 días).} other {Incluye # revisiones de CV de más de 3 meses (sin actividad en más de 90 días).}}",
+      "staleShow": "Mostrar las de más de 3 meses",
+      "staleHide": "Ocultar las de más de 3 meses",
       "deletedAt": "Eliminado {date}",
       "trashEmpty": "La papelera está vacía",
       "trashEmptyDescription": "Los candidatos que elimines aparecerán aquí y podrás restaurarlos.",
@@ -7506,6 +7511,8 @@
       "reviewQueueList": {
         "queueLabel": "Cola de revisión",
         "waitingInStage": "En espera en esta etapa",
+        "staleBadge": "Caducada · no requiere revisión",
+        "staleHint": "Caducada automáticamente: revisión de CV sin actividad en más de 90 días",
         "waitingToday": "Hoy",
         "waitingDays": "{count, plural, one {# día} other {# días}}"
       }
