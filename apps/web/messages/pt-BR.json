@@ -4740,6 +4740,23 @@
         "email": "E-mail",
         "phone": "Telefone",
         "website": "Site"
+      },
+      "AiScreeningCard": {
+        "title": "Triagem inicial por IA",
+        "hint": "É uma sugestão para quem revisa. Não altera a etapa.",
+        "verdicts": {
+          "strong": "Muito compatível",
+          "maybe": "Talvez",
+          "no": "Não compatível"
+        },
+        "screenedAt": "Triado em",
+        "noReason": "Nenhum motivo registrado.",
+        "results": {
+          "yes": "Sim",
+          "part": "Em parte",
+          "no": "Não",
+          "unknown": "Desconhecido"
+        }
       }
     },
     "careerPage": {

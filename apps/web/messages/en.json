@@ -4740,6 +4740,23 @@
         "email": "Email",
         "phone": "Phone",
         "website": "Website"
+      },
+      "AiScreeningCard": {
+        "title": "AI first-pass screen",
+        "hint": "A suggestion for reviewers. It does not change the stage.",
+        "verdicts": {
+          "strong": "Strong match",
+          "maybe": "Maybe",
+          "no": "Not a match"
+        },
+        "screenedAt": "Screened",
+        "noReason": "No reason recorded.",
+        "results": {
+          "yes": "Yes",
+          "part": "Partly",
+          "no": "No",
+          "unknown": "Unknown"
+        }
       }
     },
     "careerPage": {

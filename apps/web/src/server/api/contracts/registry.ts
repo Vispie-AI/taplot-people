@@ -13,6 +13,7 @@ import { meContracts } from "./me";
 import { importBossResumeContract } from "./boss-resumes";
 import { syncInterviewBookingResumeContract } from "./interview-booking";
 import { talentContracts } from "./talent";
+import { aiScreeningsContracts } from "./ai-screenings";
 import type { RouteDefinition } from "./types";
 
 export const apiContracts: RouteDefinition[] = [
@@ -31,4 +32,5 @@ export const apiContracts: RouteDefinition[] = [
   importBossResumeContract,
   syncInterviewBookingResumeContract,
   ...talentContracts,
+  ...aiScreeningsContracts,
 ];

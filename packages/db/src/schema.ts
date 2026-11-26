@@ -3914,6 +3914,49 @@ export const candidateTalentMatches = pgTable(
   ],
 );
 
+// First-pass AI resume screen of a candidate against one job (Talent Amy's Opus
+// screen): verdict strong | maybe | no, one-line reason, the criteria it checked
+// and which model screened when. One row per candidate x source job; a later
+// screen replaces it. It is a suggestion for reviewers, never a stage change.
+// `sourceJobId` is the id the screening engine uses for the job (a Lark Base
+// record id); `jobId` links it to the Harly job when one matches.
+export const candidateAiScreenings = pgTable(
+  "candidate_ai_screenings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => candidates.id, { onDelete: "cascade" }),
+    sourceJobId: text("source_job_id").notNull(),
+    jobId: uuid("job_id").references(() => jobs.id, { onDelete: "set null" }),
+    // Id of the source record the screen was made on (a Lark Base candidate record).
+    sourceRecordId: text("source_record_id"),
+    verdict: text("verdict").notNull(),
+    reason: text("reason"),
+    // [{ label, result, quote }]
+    criteria: jsonb("criteria").default(sql`'[]'::jsonb`).notNull(),
+    model: text("model"),
+    screenedAt: timestamp("screened_at", { withTimezone: true }).notNull(),
+    ...timestamps(),
+  },
+  (table) => [
+    uniqueIndex("candidate_ai_screenings_candidate_job_idx").on(
+      table.workspaceId,
+      table.candidateId,
+      table.sourceJobId,
+    ),
+    index("candidate_ai_screenings_screened_at_idx").on(
+      table.workspaceId,
+      table.screenedAt,
+    ),
+    index("candidate_ai_screenings_job_idx").on(table.jobId),
+    index("candidate_ai_screenings_candidate_idx").on(table.candidateId),
+  ],
+);
+
 // Candidate referrals — internal "so-and-so recommends this candidate"
 // records, distinct from poolEntries (talent-pool membership): a referral
 // can exist for a candidate who isn't in the pool at all, credits a specific

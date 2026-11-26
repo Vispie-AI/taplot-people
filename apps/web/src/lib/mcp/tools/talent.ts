@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import { candidates } from "@harly/db";
 
+import { SCREENING_VERDICTS, parseScreeningTime } from "@/features/ai-screenings/input";
+import { listAiScreenings } from "@/features/ai-screenings/service";
 import { actorHasPermission, candidateScopeSql } from "@/features/search/scope";
 import { resolveSearchActor } from "@/features/search/workspace-search";
 import {
@@ -143,8 +145,46 @@ const talentStatsTool = defineMcpTool({
   },
 });
 
+
+const candidatesListScreenings = defineMcpTool({
+  name: "candidates_list_screenings",
+  title: "List first-pass AI resume screens",
+  description:
+    "First-pass AI resume screens (Talent Amy's Opus screen), newest first: per candidate and job the verdict (strong, maybe, no), the one-line reason, the model and when it was screened, plus the exact total and the count per verdict for the same filter. A screen is a suggestion for reviewers, not a decision; stages and pass/fail stay with people. Use `since` / `until` for a period, `verdict` for one bucket, `candidateId` for one person. Each result has the candidate's Taplot People link (`url`).",
+  group: "candidates",
+  scope: "candidates:read",
+  permission: "candidates:view",
+  annotations: READ,
+  input: z.object({
+    candidateId: z.uuid().optional().describe("Only this candidate."),
+    jobId: z.uuid().optional().describe("Only screens for this Harly job."),
+    verdict: z.enum(SCREENING_VERDICTS).optional().describe("strong, maybe or no."),
+    since: z.string().trim().max(40).optional().describe("Screened on or after this YYYY-MM-DD date (Asia/Shanghai) or ISO time."),
+    until: z.string().trim().max(40).optional().describe("Screened before this date or time."),
+    limit: z.number().int().min(1).max(100).default(25).describe("Page size, 1-100."),
+    offset: z.number().int().min(0).default(0).describe("Results to skip, from nextOffset."),
+  }),
+  async run(input, ctx) {
+    const since = parseScreeningTime(input.since);
+    const until = parseScreeningTime(input.until);
+    if ((input.since && !since) || (input.until && !until)) {
+      throw new McpToolError("since and until must be a YYYY-MM-DD date or an ISO time.", "invalid_input");
+    }
+    const viewer = await viewerFor(ctx.appOrigin);
+    const result = await listAiScreenings(viewer, { ...input, since, until });
+    return {
+      ...result,
+      screenings: result.screenings.map(({ reason, criteria, candidateName, ...rest }) => ({
+        ...rest,
+        untrusted_text: { candidateName, reason, criteria },
+      })),
+    };
+  },
+});
+
 export const talentTools: McpToolDefinition[] = [
   talentSearch,
   talentGetProfile,
   talentStatsTool,
+  candidatesListScreenings,
 ] as McpToolDefinition[];
