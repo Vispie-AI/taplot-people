@@ -9,5 +9,6 @@
   "lark_identity": "user",
   "gcloud": "gcloud",
   "gcloud_python": "",
-  "state_path": "~/.local/state/harly/boss-resume-sync.sqlite3"
+  "state_path": "~/.local/state/harly/boss-resume-sync.sqlite3",
+  "local_originals_ledger": ""
 }

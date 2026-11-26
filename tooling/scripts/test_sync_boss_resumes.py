@@ -86,6 +86,9 @@ class IncrementalResumeSyncTest(unittest.TestCase):
             get.assert_not_called()
 
     def test_an_original_over_the_upload_limit_is_recorded_once_and_never_downloaded(self):
+        ledger = Path(self.temp.name) / "ingest.json"
+        ledger.write_text(json.dumps({SHA: {"path": "/synthetic/originals/example.pdf"}}))
+        self.config["local_originals_ledger"] = str(ledger)
         with patch.object(sync, "request_bytes", side_effect=gcs(ORIGINAL, size=sync.MAX_BYTES + 1)) as get, \
              patch.object(sync, "import_original") as post:
             result = self.run_sync()
@@ -93,6 +96,9 @@ class IncrementalResumeSyncTest(unittest.TestCase):
             self.assertFalse([c for c in get.call_args_list if c.args[0].endswith("?alt=media")])
             post.assert_not_called()
         self.assertEqual(self.checkpoint()[:2], (SHA, "too_large"))
+        with sqlite3.connect(self.config["state_path"]) as state:
+            self.assertEqual(state.execute("SELECT gcs_path,local_path FROM resume_sync").fetchone(),
+                             ("gs://example-private/resumes/example.pdf", "/synthetic/originals/example.pdf"))
         with patch.object(sync, "request_bytes") as get:
             self.assertEqual(self.run_sync()["skipped_unsyncable"], 1)   # the next run does not fetch it again
             get.assert_not_called()

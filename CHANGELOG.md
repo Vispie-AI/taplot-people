@@ -28,7 +28,7 @@ operators. How to cut a release is in [RELEASING.md](RELEASING.md). The
 
 ### Fixed
 
-- BOSS resume sync (`tooling/scripts/sync-boss-resumes.py`): an original larger than the 10 MB resume upload limit, or of a type Harly cannot import (for example an image), is recorded once as `too_large` / `unsupported_type` and skipped on later runs until its checksum changes, instead of being downloaded and retried on every run. The object's size is read from storage metadata before any download. A sync with 50 such records used to hold the sync lock for over 30 minutes and blocked every per-record import behind it.
+- BOSS resume sync (`tooling/scripts/sync-boss-resumes.py`): an original larger than the 10 MB resume upload limit, or of a type Harly cannot import (for example an image), is recorded once as `too_large` / `unsupported_type` and skipped on later runs until its checksum changes, instead of being downloaded and retried on every run. The object's size is read from storage metadata before any download. Such records keep the original's storage path and, when the new optional `local_originals_ledger` setting points at the collector's ingest ledger, its local file path (`gcs_path` / `local_path` in the sync state), so a reviewer can open the original directly. A sync with 50 such records used to hold the sync lock for over 30 minutes and blocked every per-record import behind it.
 
 - `GET /api/v1/candidates` no longer skips candidates while paging with `cursor`. The next-page cursor was rounded to milliseconds while the database keeps microseconds, so candidates created in the same millisecond as a page boundary (for example by a bulk import) were dropped. Cursors issued before this fix keep working.
 
