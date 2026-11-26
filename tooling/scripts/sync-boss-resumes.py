@@ -30,6 +30,15 @@ MIME_TYPES = {
 }
 
 
+# Final states for an original that can never be imported while its SHA256 stays the same (Harly accepts PDF / Word
+# up to MAX_BYTES): recorded once and skipped afterwards, unlike `retry`.
+UNSYNCABLE = ("too_large", "unsupported_type")
+
+
+class Unsyncable(Exception):
+    """The original can never be imported as it is: its state is the reason (one of UNSYNCABLE)."""
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise ValueError("Unexpected redirect from private service")
@@ -142,11 +151,28 @@ def import_original(config, api_key, record_id, fields, original):
     return result
 
 
+def originals_on_disk(config):
+    """{sha256: local path} from the collector's ingest ledger (`local_originals_ledger`, optional: a JSON object keyed
+    by SHA256 whose entries carry `path`), so a reviewer can open an original that cannot be imported. Read only; a
+    missing or unreadable ledger gives {}."""
+    path = config.get("local_originals_ledger")
+    if not path:
+        return {}
+    try:
+        ledger = json.loads(Path(path).expanduser().read_text())
+    except (OSError, ValueError):
+        return {}
+    entries = ledger.get("items", ledger) if isinstance(ledger, dict) else {}
+    return {str(sha).lower(): entry["path"] for sha, entry in entries.items()
+            if isinstance(entry, dict) and isinstance(entry.get("path"), str)}
+
+
 def sync(config, *, record_id=None, verify_repeat=False):
     state_path = Path(config["state_path"]).expanduser()
     state_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.umask(0o077)
-    counts = {"eligible": 0, "synced": 0, "unchanged": 0, "failed": 0, "missing_original": 0}
+    counts = {"eligible": 0, "synced": 0, "unchanged": 0, "failed": 0, "missing_original": 0,
+              "unsyncable": 0, "skipped_unsyncable": 0}
     with state_path.with_suffix(".lock").open("a") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -169,6 +195,11 @@ def sync(config, *, record_id=None, verify_repeat=False):
             state.execute("""CREATE TABLE IF NOT EXISTS resume_sync (
                 source_record_id TEXT PRIMARY KEY, sha256 TEXT, candidate_id TEXT, file_id TEXT,
                 state TEXT NOT NULL, updated_at TEXT NOT NULL, error TEXT)""")
+            columns = {row[1] for row in state.execute("PRAGMA table_info(resume_sync)")}
+            for column in ("gcs_path", "local_path"):   # where a reviewer opens an original that cannot be imported
+                if column not in columns:
+                    state.execute(f"ALTER TABLE resume_sync ADD COLUMN {column} TEXT")
+            local_paths = originals_on_disk(config)
             for current_id, fields in lark_records(config):
                 if not source_is_boss(fields["Source"]) or record_id and record_id != current_id:
                     continue
@@ -178,6 +209,11 @@ def sync(config, *, record_id=None, verify_repeat=False):
                                          (current_id,)).fetchone()
                 if previous == (sha.lower(), "synced") and not verify_repeat:
                     counts["unchanged"] += 1
+                    continue
+                if previous and previous[0] == sha.lower() and previous[1] in UNSYNCABLE:
+                    # The same original was already found too large or of an unsupported type: it can never be
+                    # imported, so it is not downloaded again on every run (each retry held the lock ~1-2 minutes).
+                    counts["skipped_unsyncable"] += 1
                     continue
                 now = datetime.datetime.now(datetime.timezone.utc).isoformat()
                 try:
@@ -190,10 +226,16 @@ def sync(config, *, record_id=None, verify_repeat=False):
                     if not isinstance(fields.get("Candidate Name"), str) or not fields["Candidate Name"].strip():
                         raise ValueError("Candidate name is missing")
                     key = object_name(config["gcs_bucket"], canonical)
+                    if not MIME_TYPES.get(Path(canonical).suffix.lower()):
+                        raise Unsyncable("unsupported_type")
                     token = command([gcloud, "auth", "print-access-token"])
                     url = ("https://storage.googleapis.com/storage/v1/b/" + urllib.parse.quote(config["gcs_bucket"], safe="")
-                           + "/o/" + urllib.parse.quote(key, safe="") + "?alt=media")
-                    original = request_bytes(url, headers={"Authorization": "Bearer " + token})
+                           + "/o/" + urllib.parse.quote(key, safe=""))
+                    headers = {"Authorization": "Bearer " + token}
+                    size = int(json.loads(request_bytes(url, headers=headers, limit=64 * 1024)).get("size") or 0)
+                    if size > MAX_BYTES:
+                        raise Unsyncable("too_large")   # over Harly's resume upload limit: never downloaded
+                    original = request_bytes(url + "?alt=media", headers=headers)
                     if not original or hashlib.sha256(original).hexdigest() != sha.lower():
                         raise ValueError("GCS original does not match Document SHA256")
                     result = import_original(config, api_key, current_id, fields, original)
@@ -201,17 +243,28 @@ def sync(config, *, record_id=None, verify_repeat=False):
                         repeated = import_original(config, api_key, current_id, fields, original)
                         if (result["candidateId"], result["fileId"]) != (repeated["candidateId"], repeated["fileId"]):
                             raise ValueError("Repeated import created a different attachment")
-                    state.execute("""INSERT INTO resume_sync VALUES (?,?,?,?,?,?,NULL)
+                    state.execute("""INSERT INTO resume_sync (source_record_id,sha256,candidate_id,file_id,state,updated_at,error) VALUES (?,?,?,?,?,?,NULL)
                         ON CONFLICT(source_record_id) DO UPDATE SET sha256=excluded.sha256,
                         candidate_id=excluded.candidate_id,file_id=excluded.file_id,
                         state=excluded.state,updated_at=excluded.updated_at,error=NULL""",
                         (current_id, sha.lower(), result["candidateId"], result["fileId"], "synced", now))
                     counts["synced"] += 1
                     print(json.dumps({"sourceRecordId": current_id, **result}, ensure_ascii=False))
+                except Unsyncable as error:
+                    gcs_path = f"gs://{config['gcs_bucket']}/{object_name(config['gcs_bucket'], canonical)}"
+                    state.execute("""INSERT INTO resume_sync
+                        (source_record_id,sha256,candidate_id,file_id,state,updated_at,error,gcs_path,local_path)
+                        VALUES (?,?,NULL,NULL,?,?,NULL,?,?)
+                        ON CONFLICT(source_record_id) DO UPDATE SET sha256=excluded.sha256,state=excluded.state,
+                        updated_at=excluded.updated_at,error=NULL,gcs_path=excluded.gcs_path,
+                        local_path=excluded.local_path""",
+                        (current_id, sha.lower(), str(error), now, gcs_path, local_paths.get(sha.lower())))
+                    counts["unsyncable"] += 1
+                    print(json.dumps({"sourceRecordId": current_id, "state": str(error)}))
                 except (ValueError, RuntimeError, urllib.error.URLError, TimeoutError) as error:
                     # HTTP response bodies, tokens and candidate PII never enter the ledger or stdout.
                     code = f"HTTP_{error.code}" if isinstance(error, urllib.error.HTTPError) else type(error).__name__
-                    state.execute("""INSERT INTO resume_sync VALUES (?,?,NULL,NULL,'retry',?,?)
+                    state.execute("""INSERT INTO resume_sync (source_record_id,sha256,candidate_id,file_id,state,updated_at,error) VALUES (?,?,NULL,NULL,'retry',?,?)
                         ON CONFLICT(source_record_id) DO UPDATE SET state='retry',updated_at=excluded.updated_at,
                         error=excluded.error""", (current_id, sha.lower(), now, code))
                     counts["failed"] += 1

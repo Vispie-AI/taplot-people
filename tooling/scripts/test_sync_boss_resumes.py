@@ -19,6 +19,15 @@ RESULT = {"sourceRecordId": "rec-example", "sha256": SHA,
           "fileId": "20000000-0000-4000-8000-000000000001", "deduplicated": False}
 
 
+def gcs(original, size=None):
+    """GCS as the sync reads it: the object's metadata first, then its bytes (?alt=media)."""
+    def answer(url, **_kwargs):
+        if url.endswith("?alt=media"):
+            return original
+        return json.dumps({"size": str(len(original) if size is None else size)}).encode()
+    return answer
+
+
 class IncrementalResumeSyncTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -46,7 +55,7 @@ class IncrementalResumeSyncTest(unittest.TestCase):
             return state.execute("SELECT sha256,state,candidate_id,file_id FROM resume_sync").fetchone()
 
     def test_successful_record_is_incremental_and_verifies_gcs_checksum(self):
-        with patch.object(sync, "request_bytes", return_value=ORIGINAL), \
+        with patch.object(sync, "request_bytes", side_effect=gcs(ORIGINAL)), \
              patch.object(sync, "import_original", return_value=RESULT) as post:
             self.assertEqual(self.run_sync()["synced"], 1)
             self.assertEqual(self.run_sync()["unchanged"], 1)
@@ -54,16 +63,16 @@ class IncrementalResumeSyncTest(unittest.TestCase):
         self.assertEqual(self.checkpoint(), (SHA, "synced", RESULT["candidateId"], RESULT["fileId"]))
 
     def test_failed_upload_is_retried_without_a_success_checkpoint(self):
-        with patch.object(sync, "request_bytes", return_value=ORIGINAL), \
+        with patch.object(sync, "request_bytes", side_effect=gcs(ORIGINAL)), \
              patch.object(sync, "import_original", side_effect=RuntimeError("Synthetic failure")):
             self.assertEqual(self.run_sync()["failed"], 1)
         self.assertEqual(self.checkpoint()[1:], ("retry", None, None))
-        with patch.object(sync, "request_bytes", return_value=ORIGINAL), \
+        with patch.object(sync, "request_bytes", side_effect=gcs(ORIGINAL)), \
              patch.object(sync, "import_original", return_value=RESULT):
             self.assertEqual(self.run_sync()["synced"], 1)
 
     def test_checksum_mismatch_never_reaches_harly(self):
-        with patch.object(sync, "request_bytes", return_value=b"wrong bytes"), \
+        with patch.object(sync, "request_bytes", side_effect=gcs(b"wrong bytes")), \
              patch.object(sync, "import_original") as post:
             self.assertEqual(self.run_sync()["failed"], 1)
             post.assert_not_called()
@@ -76,31 +85,63 @@ class IncrementalResumeSyncTest(unittest.TestCase):
             self.assertEqual((result["missing_original"], result["failed"]), (1, 1))
             get.assert_not_called()
 
+    def test_an_original_over_the_upload_limit_is_recorded_once_and_never_downloaded(self):
+        ledger = Path(self.temp.name) / "ingest.json"
+        ledger.write_text(json.dumps({SHA: {"path": "/synthetic/originals/example.pdf"}}))
+        self.config["local_originals_ledger"] = str(ledger)
+        with patch.object(sync, "request_bytes", side_effect=gcs(ORIGINAL, size=sync.MAX_BYTES + 1)) as get, \
+             patch.object(sync, "import_original") as post:
+            result = self.run_sync()
+            self.assertEqual((result["unsyncable"], result["failed"]), (1, 0))
+            self.assertFalse([c for c in get.call_args_list if c.args[0].endswith("?alt=media")])
+            post.assert_not_called()
+        self.assertEqual(self.checkpoint()[:2], (SHA, "too_large"))
+        with sqlite3.connect(self.config["state_path"]) as state:
+            self.assertEqual(state.execute("SELECT gcs_path,local_path FROM resume_sync").fetchone(),
+                             ("gs://example-private/resumes/example.pdf", "/synthetic/originals/example.pdf"))
+        with patch.object(sync, "request_bytes") as get:
+            self.assertEqual(self.run_sync()["skipped_unsyncable"], 1)   # the next run does not fetch it again
+            get.assert_not_called()
+
+    def test_an_unsupported_original_is_not_fetched_and_a_new_version_is_tried_again(self):
+        self.fields["Canonical Object Key"] = "resumes/example.jpg"
+        with patch.object(sync, "request_bytes") as get, patch.object(sync, "import_original") as post:
+            self.assertEqual(self.run_sync()["unsyncable"], 1)
+            get.assert_not_called()
+            post.assert_not_called()
+        self.assertEqual(self.checkpoint()[1], "unsupported_type")
+        revised = ORIGINAL + b"\npdf version"
+        self.fields.update({"Canonical Object Key": "resumes/example.pdf",
+                            "Document SHA256": hashlib.sha256(revised).hexdigest()})
+        with patch.object(sync, "request_bytes", side_effect=gcs(revised)), \
+             patch.object(sync, "import_original", return_value={**RESULT, "sha256": self.fields["Document SHA256"]}):
+            self.assertEqual(self.run_sync()["synced"], 1)
+
     def test_acceptance_submits_twice_and_checks_attachment_ids(self):
-        with patch.object(sync, "request_bytes", return_value=ORIGINAL), \
+        with patch.object(sync, "request_bytes", side_effect=gcs(ORIGINAL)), \
              patch.object(sync, "import_original", return_value=RESULT) as post:
             self.assertEqual(self.run_sync(record_id="rec-example", verify_repeat=True)["synced"], 1)
             self.assertEqual(post.call_count, 2)
 
     def test_acceptance_rejects_two_different_attachment_ids(self):
         other = {**RESULT, "fileId": "20000000-0000-4000-8000-000000000002"}
-        with patch.object(sync, "request_bytes", return_value=ORIGINAL), \
+        with patch.object(sync, "request_bytes", side_effect=gcs(ORIGINAL)), \
              patch.object(sync, "import_original", side_effect=[RESULT, other]):
             self.assertEqual(self.run_sync(record_id="rec-example", verify_repeat=True)["failed"], 1)
         self.assertEqual(self.checkpoint()[1], "retry")
 
     def test_changed_checksum_is_imported_again(self):
-        with patch.object(sync, "request_bytes", return_value=ORIGINAL), \
+        with patch.object(sync, "request_bytes", side_effect=gcs(ORIGINAL)), \
              patch.object(sync, "import_original", return_value=RESULT):
             self.run_sync()
         revised = ORIGINAL + b"\nnew version"
         self.fields["Document SHA256"] = hashlib.sha256(revised).hexdigest()
-        with patch.object(sync, "request_bytes", return_value=revised), \
+        with patch.object(sync, "request_bytes", side_effect=gcs(revised)), \
              patch.object(sync, "import_original", return_value={**RESULT, "sha256": self.fields["Document SHA256"]}):
             self.assertEqual(self.run_sync()["synced"], 1)
 
     def test_refuses_checkpoint_reuse_with_a_different_destination(self):
-        with patch.object(sync, "request_bytes", return_value=ORIGINAL), \
+        with patch.object(sync, "request_bytes", side_effect=gcs(ORIGINAL)), \
              patch.object(sync, "import_original", return_value=RESULT):
             self.run_sync()
         self.config["api_base_url"] = "https://other.example.test"

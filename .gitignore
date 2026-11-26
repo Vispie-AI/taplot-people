@@ -97,3 +97,6 @@ public/images/figma-preview/
 
 # JetBrains IDE settings
 .idea/
+
+# Python bytecode
+__pycache__/
