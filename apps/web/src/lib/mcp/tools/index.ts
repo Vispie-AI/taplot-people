@@ -3,6 +3,7 @@ import "server-only";
 import type { McpToolDefinition } from "../types";
 import { candidatesTools } from "./candidates";
 import { jobsTools } from "./jobs";
+import { talentTools } from "./talent";
 import { messagesTools } from "./messages";
 import { interviewsOffersDocumentsTools } from "./interviews-offers-documents";
 import { tasksReportsAutomationsSettingsTools } from "./tasks-reports-automations-settings";
@@ -15,6 +16,7 @@ import { workspaceTools } from "./workspace";
 export const MCP_TOOLS: McpToolDefinition[] = [
   ...workspaceTools,
   ...candidatesTools,
+  ...talentTools,
   ...jobsTools,
   ...messagesTools,
   ...interviewsOffersDocumentsTools,

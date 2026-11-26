@@ -3788,6 +3788,132 @@ export const candidateTags = pgTable(
   ],
 );
 
+// Structured talent profile: one row per candidate, written by an external
+// tagging engine through the API (talent:write). Every list value has at least
+// one entry in `evidence` quoting the source text it came from. Matches per
+// posting live in candidate_talent_matches so they can be sorted by score.
+export const candidateTalentProfiles = pgTable(
+  "candidate_talent_profiles",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => candidates.id, { onDelete: "cascade" }),
+    // Taxonomy/prompt version of the engine that produced the profile.
+    tagVersion: text("tag_version").notNull(),
+    // Hash of the engine input, so an engine can skip unchanged candidates.
+    inputHash: text("input_hash"),
+    engine: text("engine").notNull(),
+    model: text("model"),
+    city: text("city"),
+    experienceYears: integer("experience_years"),
+    education: text("education"),
+    // Coarse band only ("25-29"); never an exact age or birth date.
+    skills: text("skills").array().default(sql`'{}'::text[]`).notNull(),
+    roles: text("roles").array().default(sql`'{}'::text[]`).notNull(),
+    companies: text("companies").array().default(sql`'{}'::text[]`).notNull(),
+    keyCompanies: text("key_companies")
+      .array()
+      .default(sql`'{}'::text[]`)
+      .notNull(),
+    industries: text("industries")
+      .array()
+      .default(sql`'{}'::text[]`)
+      .notNull(),
+    workKinds: text("work_kinds")
+      .array()
+      .default(sql`'{}'::text[]`)
+      .notNull(),
+    sourceChannels: text("source_channels")
+      .array()
+      .default(sql`'{}'::text[]`)
+      .notNull(),
+    // [{ kind, title, metric }]
+    works: jsonb("works").default(sql`'[]'::jsonb`).notNull(),
+    // [{ field, value, quote }]
+    evidence: jsonb("evidence").default(sql`'[]'::jsonb`).notNull(),
+    bestPostingKey: text("best_posting_key"),
+    bestScore: integer("best_score"),
+    firstContactAt: timestamp("first_contact_at", { withTimezone: true }),
+    lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
+    taggedAt: timestamp("tagged_at", { withTimezone: true }).notNull(),
+    ...timestamps(),
+  },
+  (table) => [
+    uniqueIndex("candidate_talent_profiles_workspace_candidate_idx").on(
+      table.workspaceId,
+      table.candidateId,
+    ),
+    index("candidate_talent_profiles_skills_idx").using("gin", table.skills),
+    index("candidate_talent_profiles_roles_idx").using("gin", table.roles),
+    index("candidate_talent_profiles_companies_idx").using(
+      "gin",
+      table.companies,
+    ),
+    index("candidate_talent_profiles_key_companies_idx").using(
+      "gin",
+      table.keyCompanies,
+    ),
+    index("candidate_talent_profiles_industries_idx").using(
+      "gin",
+      table.industries,
+    ),
+    index("candidate_talent_profiles_first_contact_idx").on(
+      table.workspaceId,
+      table.firstContactAt,
+    ),
+    index("candidate_talent_profiles_last_active_idx").on(
+      table.workspaceId,
+      table.lastActiveAt,
+    ),
+    index("candidate_talent_profiles_best_score_idx").on(
+      table.workspaceId,
+      table.bestScore,
+    ),
+  ],
+);
+
+// Per-posting fit of a candidate (0-10), with the reason and quotes behind it.
+// `postingKey` is the engine's stable posting identifier; `jobId` links it to a
+// Harly job when one exists.
+export const candidateTalentMatches = pgTable(
+  "candidate_talent_matches",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => candidates.id, { onDelete: "cascade" }),
+    postingKey: text("posting_key").notNull(),
+    postingLabel: text("posting_label"),
+    jobId: uuid("job_id").references(() => jobs.id, { onDelete: "set null" }),
+    score: integer("score").notNull(),
+    tier: text("tier"),
+    reason: text("reason"),
+    // [{ quote }]
+    evidence: jsonb("evidence").default(sql`'[]'::jsonb`).notNull(),
+    ...timestamps(),
+  },
+  (table) => [
+    uniqueIndex("candidate_talent_matches_candidate_posting_idx").on(
+      table.workspaceId,
+      table.candidateId,
+      table.postingKey,
+    ),
+    index("candidate_talent_matches_posting_score_idx").on(
+      table.workspaceId,
+      table.postingKey,
+      table.score,
+    ),
+    index("candidate_talent_matches_candidate_idx").on(table.candidateId),
+  ],
+);
+
 // Candidate referrals — internal "so-and-so recommends this candidate"
 // records, distinct from poolEntries (talent-pool membership): a referral
 // can exist for a candidate who isn't in the pool at all, credits a specific

@@ -1198,6 +1198,13 @@
       "when": 1795420650697,
       "tag": "0170_candidate_lists",
       "breakpoints": true
+    },
+    {
+      "idx": 171,
+      "version": "7",
+      "when": 1795608615758,
+      "tag": "0171_talent_profiles",
+      "breakpoints": true
     }
   ]
 }

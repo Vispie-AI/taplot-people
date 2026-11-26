@@ -30,6 +30,8 @@ export const API_SCOPES = [
   "notes:write",
   "tags:read",
   "tags:write",
+  "talent:read",
+  "talent:write",
   "stages:read",
   "stages:write",
   "activity:read",

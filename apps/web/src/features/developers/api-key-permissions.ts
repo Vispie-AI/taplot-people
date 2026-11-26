@@ -32,6 +32,8 @@ export const API_SCOPE_PERMISSION: Record<ApiScope, Permission> = {
   "notes:write": "collab:write",
   "tags:read": "candidates:view",
   "tags:write": "candidates:edit",
+  "talent:read": "candidates:view",
+  "talent:write": "candidates:edit",
   "stages:read": "jobs:view",
   "stages:write": "jobs:edit",
   "activity:read": "reports:read",
