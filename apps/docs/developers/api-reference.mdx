@@ -249,6 +249,29 @@ a secret key with `talent:write`.
 and 7+ and how many 7+ have not been contacted, plus source channels, new
 candidates per week and key-company coverage.
 
+## First-pass AI screens
+
+An outside screening service can store its first-pass resume screen on the
+candidate: one row per candidate and job with a verdict (`strong`, `maybe` or
+`no`), a one-line reason, the criteria it checked, the model and the time. It is
+a suggestion for reviewers; it never changes a stage or status. The candidate
+page shows it in an "AI first-pass screen" card.
+
+`PUT /api/v1/integrations/ai-screenings` takes up to 100 items. Each item
+names the candidate by `candidateId`, or by the `sourceRecordId` of a BOSS
+resume import, plus the `sourceJobId` the service uses for the job. A job whose
+slug is `lark-<sourceJobId lowercased>` is linked to the Harly job. A screen
+older than the stored one for the same candidate and job is skipped, so replays
+are safe, and items that cannot be resolved are listed under `unresolved` while
+the rest are written. It needs a secret key with `candidates:write` and is
+recorded in the audit log with counts only.
+
+`GET /api/v1/ai-screenings` (`candidates:read`) lists screens newest first with
+the exact total and the count per verdict for the same filter. Filter with
+`candidateId`, `jobId`, `sourceJobId`, `verdict`, `since` and `until`; a plain
+date means that day in Asia/Shanghai. The MCP tool `candidates_list_screenings`
+returns the same.
+
 ## All scopes
 
 ```text

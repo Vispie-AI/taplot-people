@@ -10,6 +10,9 @@ import { CandidateActionBar } from "@/features/candidates/CandidateActionBar";
 import { CandidateActivityRail } from "@/features/candidates/CandidateActivityRail";
 import { RejectionReasonTag } from "@/features/rejection-reasons/RejectionReasonTag";
 import { CandidateContactLinks } from "@/features/candidates/CandidateContactLinks";
+import { AiScreeningCard } from "@/features/candidates/AiScreeningCard";
+import { listAiScreenings } from "@/features/ai-screenings/service";
+import { getHarlyPublicOrigin } from "@/lib/public-origin";
 import { CandidateSummaryCard } from "@/features/candidates/CandidateSummaryCard";
 import { CandidatePager } from "@/features/candidates/CandidatePager";
 import { CandidateStickyHeader } from "@/features/candidates/CandidateStickyHeader";
@@ -170,6 +173,10 @@ export default async function CandidateDetailPage({
   const latestResume = files[0] ?? null;
   const latestApplication = applications[0] ?? null;
   const gravatarEnabled = await getWorkspaceGravatarEnabled(workspaceId);
+  const aiScreenings = await listAiScreenings(
+    { workspaceId, appOrigin: getHarlyPublicOrigin() },
+    { candidateId: candidate.id, limit: 20 },
+  );
   const avatarFallbackSrcs = candidateAvatarFallbackSrcs(candidate.email, candidate.githubUrl, {
     gravatarEnabled,
   });
@@ -384,6 +391,18 @@ export default async function CandidateDetailPage({
 
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           <div className="min-w-0 space-y-5">
+            <AiScreeningCard
+              screenings={aiScreenings.screenings.map((screening) => ({
+                jobTitle: screening.jobTitle,
+                sourceJobId: screening.sourceJobId,
+                verdict: screening.verdict,
+                reason: screening.reason,
+                criteria: screening.criteria,
+                model: screening.model,
+                screenedAt: screening.screenedAt,
+              }))}
+            />
+
             <DuplicateDetectionCard
               candidateId={candidate.id}
               suspects={suspectCandidates}

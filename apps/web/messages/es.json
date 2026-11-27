@@ -4740,6 +4740,23 @@
         "email": "Correo",
         "phone": "Teléfono",
         "website": "Sitio web"
+      },
+      "AiScreeningCard": {
+        "title": "Preselección con IA",
+        "hint": "Es una sugerencia para quien revisa. No cambia la etapa.",
+        "verdicts": {
+          "strong": "Muy buen perfil",
+          "maybe": "Quizá",
+          "no": "No encaja"
+        },
+        "screenedAt": "Evaluado",
+        "noReason": "Sin motivo registrado.",
+        "results": {
+          "yes": "Sí",
+          "part": "En parte",
+          "no": "No",
+          "unknown": "Desconocido"
+        }
       }
     },
     "careerPage": {

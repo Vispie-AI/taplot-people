@@ -4740,6 +4740,23 @@
         "email": "E-Mail",
         "phone": "Telefon",
         "website": "Website"
+      },
+      "AiScreeningCard": {
+        "title": "KI-Vorauswahl",
+        "hint": "Eine Empfehlung für die Prüfenden. Sie ändert die Phase nicht.",
+        "verdicts": {
+          "strong": "Sehr gut passend",
+          "maybe": "Vielleicht",
+          "no": "Passt nicht"
+        },
+        "screenedAt": "Geprüft",
+        "noReason": "Kein Grund erfasst.",
+        "results": {
+          "yes": "Ja",
+          "part": "Teilweise",
+          "no": "Nein",
+          "unknown": "Unbekannt"
+        }
       }
     },
     "careerPage": {

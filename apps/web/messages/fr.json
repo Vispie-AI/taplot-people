@@ -4740,6 +4740,23 @@
         "email": "E-mail",
         "phone": "Téléphone",
         "website": "Site web"
+      },
+      "AiScreeningCard": {
+        "title": "Présélection par IA",
+        "hint": "Une suggestion pour les évaluateurs. Elle ne change pas l’étape.",
+        "verdicts": {
+          "strong": "Très bon profil",
+          "maybe": "Peut-être",
+          "no": "Ne correspond pas"
+        },
+        "screenedAt": "Évalué",
+        "noReason": "Aucun motif enregistré.",
+        "results": {
+          "yes": "Oui",
+          "part": "En partie",
+          "no": "Non",
+          "unknown": "Inconnu"
+        }
       }
     },
     "careerPage": {

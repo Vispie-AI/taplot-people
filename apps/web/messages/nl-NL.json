@@ -4740,6 +4740,23 @@
         "email": "E-mail",
         "phone": "Telefoon",
         "website": "Website"
+      },
+      "AiScreeningCard": {
+        "title": "AI-voorselectie",
+        "hint": "Een suggestie voor beoordelaars. De fase verandert niet.",
+        "verdicts": {
+          "strong": "Sterke match",
+          "maybe": "Misschien",
+          "no": "Geen match"
+        },
+        "screenedAt": "Beoordeeld",
+        "noReason": "Geen reden vastgelegd.",
+        "results": {
+          "yes": "Ja",
+          "part": "Gedeeltelijk",
+          "no": "Nee",
+          "unknown": "Onbekend"
+        }
       }
     },
     "careerPage": {

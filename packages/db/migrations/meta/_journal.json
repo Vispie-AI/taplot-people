@@ -1205,6 +1205,13 @@
       "when": 1795608615758,
       "tag": "0171_talent_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 172,
+      "version": "7",
+      "when": 1795702649324,
+      "tag": "0172_candidate_ai_screenings",
+      "breakpoints": true
     }
   ]
 }
